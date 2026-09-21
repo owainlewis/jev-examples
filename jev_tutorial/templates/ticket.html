@@ -25,10 +25,12 @@
       <div class="decision"><h3>Routing policy</h3><p>{{ result.policy.priority | replace('_', ' ') | capitalize }}</p>{% if result.policy.review_reasons %}<ul>{% for reason in result.policy.review_reasons %}<li>{{ reason }}</li>{% endfor %}</ul>{% endif %}</div>
       <details><summary>Inspect the full response</summary><pre>{{ result | tojson(indent=2) }}</pre></details>
       <p class="hint">Confidence describes the model's distribution. It is not a guarantee that the answer is correct.</p>
+    {% elif ticket.in_progress %}
+      <p class="notice" role="status">Ticket saved. Classification is running. Refresh this page to see the result. If the request was interrupted, you can retry after two minutes.</p>
     {% else %}
       <p class="notice error" role="alert">Ticket saved. {{ 'Classification failed.' if ticket.status == 'failed' else 'No classification was completed.' }} Check your API key and connection, then retry or review it yourself.</p>
     {% endif %}
-    {% if ticket.status in ['failed', 'pending'] %}<form method="post" action="{{ url_for('retry_ticket', ticket_id=ticket.id) }}" data-busy="Classifying…"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">Retry classification</button><span class="busy" role="status"></span></form>{% endif %}
+    {% if ticket.status in ['failed', 'pending'] and not ticket.in_progress %}<form method="post" action="{{ url_for('retry_ticket', ticket_id=ticket.id) }}" data-busy="Classifying…"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">Retry classification</button><span class="busy" role="status"></span></form>{% endif %}
   </section>
 </div>
 {% endblock %}

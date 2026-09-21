@@ -246,7 +246,7 @@ Exact probabilities may differ between runs. If a case behaves unexpectedly, kee
 
 Use the review form to choose a team and priority. Return to the inbox and filter by that team. The application saves your decision separately and keeps the original model response for comparison.
 
-The database lives at `instance/tickets.sqlite3`. Tickets survive a restart. If classification fails, the saved ticket remains available with a retry button and a manual review form. To show that failure deliberately, stop the server and restart it with an invalid key:
+The database lives at `instance/tickets.sqlite3`. Tickets survive a restart. If classification fails, the saved ticket remains available with a retry button and a manual review form. While a call is running, a second retry cannot start another call. If the process stops mid-request, refresh after two minutes to retry the interrupted attempt. To show an API failure deliberately, stop the server and restart it with an invalid key:
 
 ```bash
 TYPESAFE_API_KEY=invalid python -m jev_tutorial.app

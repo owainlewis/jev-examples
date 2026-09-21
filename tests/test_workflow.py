@@ -146,6 +146,83 @@ class AppTests(unittest.TestCase):
                 self.assertNotIn(b"Slow ticket", reviewer.get("/?review=1").data)
                 self.assertIn(b"Reviewed by you", reviewer.get("/tickets/1").data)
 
+    def test_overlapping_retries_make_only_one_model_call(self):
+        self.classify.side_effect = TimeoutError()
+        self.submit()
+        started, release = threading.Event(), threading.Event()
+
+        def slow_classify(ticket):
+            started.set()
+            if not release.wait(5):
+                raise TimeoutError()
+            return response_fixture()
+
+        self.classify.reset_mock()
+        self.classify.side_effect = slow_classify
+        first = self.app.test_client()
+        first.get("/")
+        with first.session_transaction() as session:
+            token = session["csrf_token"]
+        worker = threading.Thread(target=lambda: first.post("/tickets/1/retry", data={"csrf_token": token}))
+        worker.start()
+        try:
+            self.assertTrue(started.wait(5))
+            second = self.post("/tickets/1/retry")
+            self.assertEqual(second.status_code, 409)
+        finally:
+            release.set()
+            worker.join(5)
+        self.assertEqual(self.classify.call_count, 1)
+        self.assertIn(b"Jev's assessment", self.client.get("/tickets/1").data)
+
+    def test_interrupted_attempt_can_retry_and_late_completion_cannot_overwrite(self):
+        for old_call_fails in (False, True):
+            with self.subTest(old_call_fails=old_call_fails):
+                started, release = threading.Event(), threading.Event()
+                now = [1000.0]
+                calls = []
+
+                def classify(ticket):
+                    calls.append(ticket)
+                    if len(calls) == 1:
+                        started.set()
+                        if not release.wait(5) or old_call_fails:
+                            raise TimeoutError()
+                        old_result = response_fixture()
+                        old_result["model"] = "stale-attempt"
+                        return old_result
+                    result = response_fixture()
+                    result["model"] = "current-attempt"
+                    return result
+
+                app = create_app(Path(self.temp.name) / f"lease-{old_call_fails}.sqlite3", classify)
+                first, second = app.test_client(), app.test_client()
+                first.get("/")
+                with first.session_transaction() as session:
+                    first_token = session["csrf_token"]
+                with patch("jev_tutorial.app.time", side_effect=lambda: now[0]):
+                    worker = threading.Thread(target=lambda: first.post("/tickets", data={
+                        "subject": "Interrupted", "body": "Export failed", "csrf_token": first_token,
+                    }))
+                    worker.start()
+                    try:
+                        self.assertTrue(started.wait(5))
+                        self.assertIn(b"Classification is running", second.get("/tickets/1").data)
+                        self.assertNotIn(b"Retry classification", second.get("/tickets/1").data)
+                        now[0] += 121
+                        self.assertIn(b"Retry classification", second.get("/tickets/1").data)
+                        with second.session_transaction() as session:
+                            token = session["csrf_token"]
+                        retry = second.post("/tickets/1/retry", data={"csrf_token": token}, follow_redirects=True)
+                        self.assertIn(b"current-attempt", retry.data)
+                    finally:
+                        release.set()
+                        worker.join(5)
+                page = second.get("/tickets/1").data
+                self.assertIn(b"current-attempt", page)
+                self.assertNotIn(b"stale-attempt", page)
+                self.assertNotIn(b"Retry classification", page)
+
     def test_invalid_submission_and_review_do_not_call_model(self):
         self.assertEqual(self.post("/tickets", subject=" ", body="empty subject").status_code, 400)
         self.classify.assert_not_called()

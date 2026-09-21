@@ -10,7 +10,7 @@ Checked locally on 21 September 2026 with Python 3.14 and the pinned dependencie
 | AC2: support app saves, classifies, displays answers, persists corrections, filters, and recovers from API failure | Pass | Browser flow plus automated persistence, error/retry, filtering, and concurrent-review tests. |
 | AC3: email command validates input, preserves IDs, separates Other from uncertainty, and fails without partial JSON | Pass | Focused tests plus five synthetic live classifications. No mailbox access or changes. |
 | AC4: screen-friendly walkthrough and agent instructions match the implementation | Pass | Commands executed, local links checked, official TypeSafe/Codex/Claude documentation checked, independent diff review. Business Inquiry remains provisional. |
-| AC5: focused tests and honest measurement evidence | Pass | 16 automated tests, compilation, dependency check, browser checks, and retained live rehearsal report. |
+| AC5: focused tests and honest measurement evidence | Pass | 18 automated tests, compilation, dependency check, browser checks, and retained live rehearsal report. |
 
 ## Automated checks
 
@@ -21,7 +21,7 @@ Checked locally on 21 September 2026 with Python 3.14 and the pinned dependencie
 git diff --check
 ```
 
-All passed. The tests use controlled responses to check application behavior, including an API call completing or failing after a human has already reviewed the ticket. They do not measure model quality.
+All passed. The tests use controlled responses to check application behavior, including an API call completing or failing after a human has already reviewed the ticket. Overlapping retries make only one model call. An interrupted attempt can be retried after its two-minute lease; its late success or failure cannot overwrite the replacement attempt. The overlapping-retry test failed before the fix (HTTP 200 instead of 409) and passed afterward. These tests do not measure model quality.
 
 ## Browser checks
 
@@ -35,6 +35,7 @@ Used the Codex in-app browser against the local Flask app with separate test dat
 - Inspected desktop and 390px mobile layout. The mobile document width and scroll width were both 390px, with no horizontal overflow.
 - Started an invalid-key instance, submitted a ticket, and saw the saved-ticket failure message and retry control.
 - Restarted that instance with the normal key, reloaded the saved ticket, and retried successfully. The ticket and its original submission time survived the restart. See the [support desk capture](evidence/support-desk.png).
+- After the retry fix, restarted against the earlier database and confirmed existing tickets survived migration. A controlled synthetic pending record showed the running-state message and no retry control. Lease expiry and stale completions were checked in the automated tests.
 - Browser console contained no warnings or errors during these flows. Server request logs showed successful page/asset loads and expected redirects, with no failed UI requests.
 
 The CSS detector ran in degraded regex mode because its optional parser modules were unavailable. It reported no matches; that is not a full accessibility or contrast audit. Visual browser inspection supplied the layout check.
