@@ -2,7 +2,10 @@
 
 # Thresholds are teaching examples. Test them on your own data.
 
+from dotenv import load_dotenv
 from typesafe_sdk import Choice, TypeSafeClient
+
+load_dotenv()
 
 document_text = """
 Project meeting, 12 September.

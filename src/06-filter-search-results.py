@@ -2,7 +2,10 @@
 
 # Thresholds are teaching examples. Test them on your own data.
 
+from dotenv import load_dotenv
 from typesafe_sdk import Noul, TypeSafeClient
+
+load_dotenv()
 
 question = "How can I export my workspace data?"
 passages = {

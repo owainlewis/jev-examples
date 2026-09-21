@@ -1,12 +1,12 @@
-# Jev examples
+# Build with Jev
 
-Basic Python examples for TypeSafe AI's Jev model. Each script contains sample data, calls Jev, and prints a suggested result.
+Learn Noul, Choice, and Score in Python. Use them in a local customer support app, then reuse the approach to classify emails from Codex or Claude Code.
 
-## Run an example
+**Start with the [video walkthrough](docs/tutorial.md).** It follows the actual commands and files, with plain explanations you can show on screen.
 
-You need Python 3.10 or newer and an API key from the [TypeSafe console](https://console.typesafe.ai).
+## Set up
 
-From the repository root, run these commands on macOS or Linux:
+Python 3.10+ and a [TypeSafe API key](https://console.typesafe.ai) are required for live classification. From the repository root on macOS or Linux:
 
 ```bash
 python3 -m venv .venv
@@ -14,38 +14,50 @@ source .venv/bin/activate
 python -m pip install -r requirements.txt
 ```
 
-Set your key in the same terminal:
+Create a local `.env` file containing `TYPESAFE_API_KEY=your_key_here`, or export that environment variable. Examples load `.env`; exported values take precedence. Never commit a real key. Model calls send the sample input to TypeSafe.
 
-```bash
-read -r -s TYPESAFE_API_KEY
-export TYPESAFE_API_KEY
-```
+## Follow the video
 
-After the first command, paste your key and press Enter. The terminal hides what you type. The scripts read the key from the environment; they do not load `.env` files.
+| Step | Command | What you learn |
+| --- | --- | --- |
+| Noul | `python examples/01-noul.py` | Detect an explicit refund request |
+| Choice | `python examples/02-choice.py` | Select a support team |
+| Score | `python examples/03-score.py` | Assess impact using an ordered rubric |
+| Combine | `python -m jev_tutorial.triage` | Ask independent questions, combine answers in code |
+| Build | `python -m jev_tutorial.app` | Create, classify, and review tickets in a browser |
+| Reuse | `python -m jev_tutorial.email_cli data/emails.json` | Classify five synthetic emails as JSON |
+| Evaluate | `python -m jev_tutorial.evaluate` | Save decisions, errors, latency, and estimated cost for twelve tickets |
 
-Run any script directly:
+Open the support desk at [127.0.0.1:5050](http://127.0.0.1:5050). Tickets and human corrections persist in `instance/tickets.sqlite3`. A failed API call keeps the ticket and offers retry. This is a local teaching app, not a hosted service with authentication.
 
-```bash
-python src/01-classify-emails.py
-```
+All thresholds are teaching values. Model confidence is not an accuracy guarantee. No example moves mail, executes refunds, or updates GitHub.
 
-Edit the sample data inside a script to try your own input. Each run sends that data to the hosted API. The search example makes three requests; the others make one each.
+The email categories are **AI Engineer, Business Inquiry, Sponsorship, and Other**. Edit [their descriptions](config/email-categories.json); Business Inquiry is provisional. The [agent guide](docs/agent-email-workflow.md) shows the shared command and optional skill installation for Codex and Claude Code. The sample uses local JSON, not a live mailbox.
 
-## Examples
+## Additional examples
 
-| Script | What it shows |
+The earlier examples remain available under `src/`. They load `.env` too.
+
+| Script | Purpose |
 | --- | --- |
-| [01-classify-emails.py](src/01-classify-emails.py) | Choose billing, support, sales, or another inbox |
-| [02-classify-github-issues.py](src/02-classify-github-issues.py) | Suggest low, medium, high, or unknown change risk |
-| [03-prioritize-support.py](src/03-prioritize-support.py) | Score whether a customer's work is blocked |
-| [04-classify-documents.py](src/04-classify-documents.py) | Sort document text by type |
-| [05-tag-feedback.py](src/05-tag-feedback.py) | Apply several tags to one feedback message |
-| [06-filter-search-results.py](src/06-filter-search-results.py) | Select passages that help answer a question |
-| [07-find-duplicate-issues.py](src/07-find-duplicate-issues.py) | Suggest duplicate reports for review |
+| [01-classify-emails.py](src/01-classify-emails.py) | One email using the provisional categories |
+| [02-classify-github-issues.py](src/02-classify-github-issues.py) | Suggest implementation risk |
+| [03-prioritize-support.py](src/03-prioritize-support.py) | Score impact on work |
+| [04-classify-documents.py](src/04-classify-documents.py) | Classify document text |
+| [05-tag-feedback.py](src/05-tag-feedback.py) | Apply multiple independent tags |
+| [06-filter-search-results.py](src/06-filter-search-results.py) | Filter three passages |
+| [07-find-duplicate-issues.py](src/07-find-duplicate-issues.py) | Suggest duplicate reports |
+| [08-showcase.py](src/08-showcase.py) | Original three-ticket combined demo |
 
-The scripts print suggestions. They do not move emails, update GitHub, or merge code. Thresholds are examples to test on your own data. API errors stop the script instead of producing a default decision.
+The original showcase uses a simpler policy than the support app. The app also checks whether impact is stated. Use `jev_tutorial/classifier.py` when explaining the app's actual behavior.
 
-## Guides
+## Check the code
 
-- [Start here: classify emails and GitHub issues](docs/tutorial.md)
-- [More use cases: support, documents, feedback, search, and duplicates](docs/use-cases.md)
+```bash
+python -m unittest discover -s tests -v
+python -m compileall -q examples jev_tutorial src
+```
+
+The automated tests use controlled responses to verify routing, persistence, failure recovery, corrections, and the email interface. They do not establish model accuracy. Run the evaluation separately for live model behavior.
+
+More material: [use cases](docs/use-cases.md), [recording notes and sources](docs/recording-notes.md), [verification](docs/verification.md).

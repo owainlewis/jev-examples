@@ -1,0 +1,7 @@
+[
+  {"id": "email-001", "subject": "Cannot access the community", "body": "I joined AI Engineer yesterday but the invite link has expired. Could you help?"},
+  {"id": "email-002", "subject": "Python workshop for our team", "body": "We would like to hire you to teach our engineers how to build AI applications. Are you available next month?"},
+  {"id": "email-003", "subject": "Sponsor your next video", "body": "We have a budget for a paid integration on your YouTube channel. Please send your sponsorship rates."},
+  {"id": "email-004", "subject": "Your train receipt", "body": "Thank you for travelling. Your receipt is attached. No action is required."},
+  {"id": "email-005", "subject": "Work together?", "body": "We want to do something together with your community. Could we chat?"}
+]

@@ -2,3 +2,6 @@
 __pycache__/
 *.py[cod]
 .env
+instance/
+local-data/
+.ruff_cache/

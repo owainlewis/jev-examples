@@ -1,8 +1,8 @@
 # Five more ways to use Jev in Python
 
-Use Jev when your program needs a judgment about text. Give it a narrow question and let your code handle the result. The [tutorial](tutorial.md) covers setup, email classification, and GitHub issue risk.
+Use Jev when your program needs a judgment about text. Give it a narrow question and let your code handle the result. These are optional examples after the [main walkthrough](tutorial.md), which covers the three types, the support app, and the Codex/Claude Code email workflow.
 
-Each example below is a separate script. Install `typesafe-sdk==0.7.0`, set `TYPESAFE_API_KEY` as shown in the tutorial, save one code block to a `.py` file, and run `python your_file.py`.
+Each example below is a separate script. Complete the README setup. The runnable files in `src/` load `.env`; the standalone code blocks below use an exported `TYPESAFE_API_KEY`. To run a block, save it to a `.py` file and run `python your_file.py`.
 
 The examples call the hosted model and print suggestions. They do not update another service. All input data is invented. Thresholds are teaching examples that need testing on your own data.
 
