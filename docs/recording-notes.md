@@ -64,7 +64,7 @@ The pasted transcripts were used as editorial context, not copied as narration. 
 ## Before recording
 
 1. Run the README setup and each main command. Keep the key and real emails off screen.
-2. Use a fresh database for the recording: `JEV_TICKET_DB=instance/recording.sqlite3 python -m jev_tutorial.app`. Use a new filename if it already contains rehearsal tickets.
+2. Use a fresh database for the recording: `JEV_TICKET_DB=instance/recording.sqlite3 uv run python -m jev_tutorial.app`. Use a new filename if it already contains rehearsal tickets.
 3. Open the walkthrough, three examples, classifier, app, category config, and synthetic emails. Increase editor font size. Keep terminal output beside the relevant code.
 4. Rehearse the successful ticket and the vague ticket. Explain unexpected outputs rather than hunting for a perfect take.
 5. Use the documented invalid-key launch to demonstrate failure. Restart normally before the next live call.

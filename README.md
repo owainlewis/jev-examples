@@ -9,10 +9,10 @@ Learn Noul, Choice, and Score in Python. Use them in a local customer support ap
 Python 3.10+ and a [TypeSafe API key](https://console.typesafe.ai) are required for live classification. From the repository root on macOS or Linux:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
+uv sync --locked
 ```
+
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) first if needed. This creates `.venv` and installs the locked dependencies, including the development dependency `ipykernel` for notebooks. Select `.venv/bin/python` as your notebook interpreter. To omit development dependencies, use `uv sync --locked --no-dev` and run commands with `uv run --no-dev python` instead of `uv run python`.
 
 Create a local `.env` file containing `TYPESAFE_API_KEY=your_key_here`, or export that environment variable. Examples load `.env`; exported values take precedence. Never commit a real key. Model calls send the sample input to TypeSafe.
 
@@ -20,13 +20,13 @@ Create a local `.env` file containing `TYPESAFE_API_KEY=your_key_here`, or expor
 
 | Step | Command | What you learn |
 | --- | --- | --- |
-| Noul | `python examples/01-noul.py` | Detect an explicit refund request |
-| Choice | `python examples/02-choice.py` | Select a support team |
-| Score | `python examples/03-score.py` | Assess impact using an ordered rubric |
-| Combine | `python -m jev_tutorial.triage` | Ask independent questions, combine answers in code |
-| Build | `python -m jev_tutorial.app` | Create, classify, and review tickets in a browser |
-| Reuse | `python -m jev_tutorial.email_cli data/emails.json` | Classify five synthetic emails as JSON |
-| Evaluate | `python -m jev_tutorial.evaluate` | Save decisions, errors, latency, and estimated cost for twelve tickets |
+| Noul | `uv run python examples/01-noul.py` | Detect an explicit refund request |
+| Choice | `uv run python examples/02-choice.py` | Select a support team |
+| Score | `uv run python examples/03-score.py` | Assess impact using an ordered rubric |
+| Combine | `uv run python -m jev_tutorial.triage` | Ask independent questions, combine answers in code |
+| Build | `uv run python -m jev_tutorial.app` | Create, classify, and review tickets in a browser |
+| Reuse | `uv run python -m jev_tutorial.email_cli data/emails.json` | Classify five synthetic emails as JSON |
+| Evaluate | `uv run python -m jev_tutorial.evaluate` | Save decisions, errors, latency, and estimated cost for twelve tickets |
 
 Open the support desk at [127.0.0.1:5050](http://127.0.0.1:5050). Tickets and human corrections persist in `instance/tickets.sqlite3`. A failed API call keeps the ticket and offers retry. This is a local teaching app, not a hosted service with authentication.
 
@@ -54,8 +54,8 @@ The original showcase uses a simpler policy than the support app. The app also c
 ## Check the code
 
 ```bash
-python -m unittest discover -s tests -v
-python -m compileall -q examples jev_tutorial src
+uv run python -m unittest discover -s tests -v
+uv run python -m compileall -q examples jev_tutorial src
 ```
 
 The automated tests use controlled responses to verify routing, persistence, failure recovery, corrections, and the email interface. They do not establish model accuracy. Run the evaluation separately for live model behavior.

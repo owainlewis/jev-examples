@@ -7,7 +7,7 @@ The agent runs a Python command. That command calls Jev. The agent then summariz
 Complete the README setup, including the TypeSafe key, then run from the repository root:
 
 ```bash
-.venv/bin/python -m jev_tutorial.email_cli data/emails.json
+uv run python -m jev_tutorial.email_cli data/emails.json
 ```
 
 Input is a JSON array. Every email needs a unique string `id`, plus nonempty `subject` and `body` strings. The sample file contains five invented messages. The command sends only subject and body to TypeSafe; IDs are preserved locally to match the answers.
@@ -15,7 +15,7 @@ Input is a JSON array. Every email needs a unique string `id`, plus nonempty `su
 Category definitions live in `config/email-categories.json`. To try another policy:
 
 ```bash
-.venv/bin/python -m jev_tutorial.email_cli data/emails.json --categories config/email-categories.json
+uv run python -m jev_tutorial.email_cli data/emails.json --categories config/email-categories.json
 ```
 
 The command emits a JSON array to stdout only after every email succeeds. On failure, stderr contains a short error and the exit status is nonzero. It does not emit a partially successful batch or silently classify failures as Other.

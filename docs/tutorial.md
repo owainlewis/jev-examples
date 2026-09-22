@@ -29,10 +29,10 @@ TypeSafe describes a training approach called Reinforcement Learning for Calibra
 You need Python 3.10 or newer, basic Python knowledge, and a TypeSafe API key. Get the key from the [TypeSafe console](https://console.typesafe.ai). Run these commands from this repository's root on macOS or Linux:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
+uv sync --locked
 ```
+
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) first if needed. This creates `.venv` and installs the locked dependencies, including the development dependency `ipykernel` for notebooks. Select `.venv/bin/python` as your notebook interpreter. To omit development dependencies, use `uv sync --locked --no-dev` and run commands with `uv run --no-dev python` instead of `uv run python`.
 
 Create a `.env` file locally and add your key:
 
@@ -73,7 +73,7 @@ Here is the part that defines our question:
 Run the complete file:
 
 ```bash
-python examples/01-noul.py
+uv run python examples/01-noul.py
 ```
 
 Read the result with:
@@ -126,7 +126,7 @@ Choice selects one answer from the options we define. Here, those options are bi
 ```
 
 ```bash
-python examples/02-choice.py
+uv run python examples/02-choice.py
 ```
 
 The script prints three things:
@@ -169,7 +169,7 @@ We will use three ordered descriptions:
 ```
 
 ```bash
-python examples/03-score.py
+uv run python examples/03-score.py
 ```
 
 The example mentions broken PDF export but a working CSV alternative. That gives us a reason to expect level 1.
@@ -192,7 +192,7 @@ Try “Nobody can log in. We cannot work and have no workaround.” Then try “
 Run:
 
 ```bash
-python -m jev_tutorial.triage
+uv run python -m jev_tutorial.triage
 ```
 
 Open [jev_tutorial/classifier.py](../jev_tutorial/classifier.py). The same state goes to four questions:
@@ -217,7 +217,7 @@ Look at `ticket_policy()`. This is where the application chooses review or a sug
 Start the application:
 
 ```bash
-python -m jev_tutorial.app
+uv run python -m jev_tutorial.app
 ```
 
 Open [localhost:5050](http://127.0.0.1:5050).
@@ -249,7 +249,7 @@ Use the review form to choose a team and priority. Return to the inbox and filte
 The database lives at `instance/tickets.sqlite3`. Tickets survive a restart. If classification fails, the saved ticket remains available with a retry button and a manual review form. While a call is running, a second retry cannot start another call. If the process stops mid-request, refresh after two minutes to retry the interrupted attempt. To show an API failure deliberately, stop the server and restart it with an invalid key:
 
 ```bash
-TYPESAFE_API_KEY=invalid python -m jev_tutorial.app
+TYPESAFE_API_KEY=invalid uv run python -m jev_tutorial.app
 ```
 
 Submit a synthetic ticket, observe “Ticket saved. Classification failed,” then stop the server and restart normally before retrying. This local app has no accounts or hosted deployment configuration; it is built to explain the workflow.
@@ -270,7 +270,7 @@ The boundaries are editable in [config/email-categories.json](../config/email-ca
 Run the five invented emails:
 
 ```bash
-python -m jev_tutorial.email_cli data/emails.json
+uv run python -m jev_tutorial.email_cli data/emails.json
 ```
 
 The command prints JSON with each email's ID, category, probabilities, confidence, review flag, and probability that the sender asks for action. It makes one request per email, with two questions in each request.
@@ -308,7 +308,7 @@ For my existing routine, the later integration point is after email retrieval: p
 We have shown examples. Now we need to count mistakes.
 
 ```bash
-python -m jev_tutorial.evaluate
+uv run python -m jev_tutorial.evaluate
 ```
 
 This runs twelve synthetic tickets from [data/tickets.json](../data/tickets.json) and saves the full responses and measurements to `local-data/evaluation.json`.
