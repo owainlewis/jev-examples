@@ -2,7 +2,10 @@
 
 # Thresholds are teaching examples. Test them on your own data.
 
+from dotenv import load_dotenv
 from typesafe_sdk import Score, TypeSafeClient
+
+load_dotenv()
 
 with TypeSafeClient(model="jev-1.13.0", timeout=30.0) as client:
     response = client.system_one(

@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}{{ ticket.subject }}{% endblock %}
+{% block content %}
+<a class="back" href="{{ url_for('inbox') }}">Back to inbox</a>
+<div class="page-heading"><div><h1>{{ ticket.subject }}</h1><p>Ticket #{{ '%03d' | format(ticket.id) }} · {{ ticket.created_at }} UTC</p></div><span class="badge {{ ticket.status }}">{{ ticket.status | replace('_', ' ') }}</span></div>
+<div class="detail-grid">
+  <section><h2>Customer message</h2><p class="message">{{ ticket.body }}</p>
+    {% if ticket.human_team %}<div class="notice"><strong>Reviewed by you</strong><p>{{ ticket.human_team | capitalize }} · {{ ticket.human_priority | capitalize }} priority</p></div>{% endif %}
+    <h2>Review the ticket</h2><p>Confirm the suggestion or choose a different team and priority.</p>
+    <form method="post" action="{{ url_for('review_ticket', ticket_id=ticket.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label for="team">Team</label><select id="team" name="team" required><option value="" disabled {% if not ticket.team %}selected{% endif %}>Choose team</option>{% for team in teams %}<option value="{{ team }}" {% if ticket.team == team %}selected{% endif %}>{{ team | capitalize }}</option>{% endfor %}</select>
+      <label for="priority">Priority</label><select id="priority" name="priority" required><option value="" disabled selected>Choose priority</option><option value="standard" {% if ticket.human_priority == 'standard' %}selected{% endif %}>Standard</option><option value="blocked" {% if ticket.human_priority == 'blocked' %}selected{% endif %}>Blocked</option></select>
+      <button type="submit">Save review</button>
+    </form>
+  </section>
+  <section class="decisions"><h2>Jev's assessment</h2>
+    {% if ticket.result %}
+      {% set result = ticket.result %}{% set answers = result.answers %}
+      <p class="hint">{{ result.model }} · {{ result.elapsed_ms }} ms · original model answer</p>
+      <div class="decision"><h3>Team <span>Choice</span></h3><p class="answer">{{ answers.team.choice | capitalize }}</p><p>Confidence {{ '%.2f' | format(answers.team.confidence) }}</p>
+      {% for name, probability in answers.team.probabilities.items() %}<div class="probability"><label for="prob-{{ loop.index }}">{{ name | capitalize }}</label><meter id="prob-{{ loop.index }}" min="0" max="1" value="{{ probability }}">{{ probability }}</meter><span>{{ '%.2f' | format(probability) }}</span></div>{% endfor %}</div>
+      <div class="decision"><h3>Impact on work <span>Score</span></h3><p class="answer">{{ '%.2f' | format(answers.impact.score) }} <small>/ 2</small></p><p>Confidence {{ '%.2f' | format(answers.impact.confidence) }}</p><p class="hint">0: work continues · 1: workaround · 2: blocked</p></div>
+      <div class="decision"><h3>Refund requested <span>Noul</span></h3><p class="answer">{{ result.policy.refund_intent | capitalize }}</p><p>Probability of yes {{ '%.2f' | format(answers.refund_requested.noul) }}</p><p class="hint">This detects intent. It does not approve a refund.</p></div>
+      <div class="decision"><h3>Routing policy</h3><p>{{ result.policy.priority | replace('_', ' ') | capitalize }}</p>{% if result.policy.review_reasons %}<ul>{% for reason in result.policy.review_reasons %}<li>{{ reason }}</li>{% endfor %}</ul>{% endif %}</div>
+      <details><summary>Inspect the full response</summary><pre>{{ result | tojson(indent=2) }}</pre></details>
+      <p class="hint">Confidence describes the model's distribution. It is not a guarantee that the answer is correct.</p>
+    {% elif ticket.in_progress %}
+      <p class="notice" role="status">Ticket saved. Classification is running. Refresh this page to see the result. If the request was interrupted, you can retry after two minutes.</p>
+    {% else %}
+      <p class="notice error" role="alert">Ticket saved. {{ 'Classification failed.' if ticket.status == 'failed' else 'No classification was completed.' }} Check your API key and connection, then retry or review it yourself.</p>
+    {% endif %}
+    {% if ticket.status in ['failed', 'pending'] and not ticket.in_progress %}<form method="post" action="{{ url_for('retry_ticket', ticket_id=ticket.id) }}" data-busy="Classifying…"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">Retry classification</button><span class="busy" role="status"></span></form>{% endif %}
+  </section>
+</div>
+{% endblock %}
