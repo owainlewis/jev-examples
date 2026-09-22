@@ -2,142 +2,181 @@
 
 ## Introduction
 
-Jev is a model from TypeSafe AI for making decisions that software can use. Give it information and a focused question, and it returns a typed answer with probabilities.
+Jev is an AI model from TypeSafe AI. It takes text and returns structured output. You provide a question and define the kind of answer you need: a yes/no probability, a category, or a score.
 
-This tutorial covers what Jev does, its three question types, and two applications: a support ticket queue and a Codex model router. The Python examples, app, and skill are included in this repository.
+For example, you can ask whether a customer wants a refund, which department should receive a ticket, or how much a problem blocks someone's work. Your code reads the result and decides what to do next.
 
-## What Jev is and why it matters
+This tutorial explains the three question types, then shows them in Python, a support ticket app, and a Codex model router. The code and setup instructions are included in this repository.
 
-### Decisions inside software
+## How Jev works
 
-Applications often need to interpret language before choosing a next step. A support ticket needs a department. A customer message may contain a refund request. A coding task may need a more capable model.
+### Send a ticket, get a category
 
-Jev evaluates these questions using the information and answer definitions you supply. Your code uses the results to route work, rank items, or ask for review.
+Suppose a customer sends this ticket:
 
-```mermaid
-flowchart LR
-    A[Information] --> B[Jev]
-    Q[Question and criteria] --> B
-    B --> C[Typed answer and probabilities]
-    C --> D[Application rules]
-    style B fill:#dbeafe,stroke:#2563eb,color:#172554
-    style D fill:#dcfce7,stroke:#16a34a,color:#14532d
-```
+> I was charged twice for my subscription. Please refund the duplicate payment.
 
-A regular language model can also classify text and return structured output. Jev's API is built around focused decisions. The reason to consider it is whether its answers, cost, and response time suit your workload. See the [TypeSafe introduction](https://docs.typesafe.ai/introduction).
+We ask: **Which team should handle this ticket?** We define four possible answers:
 
-### System One and System Two
-
-TypeSafe uses the name System One for fast, focused judgments. The name refers to the distinction between quick, intuitive thinking and slower, deliberate thinking popularized in *Thinking, Fast and Slow*.
-
-In a software workflow, these roles can complement each other. One model classifies the work; another investigates the problem or produces a response. This is an analogy for their roles, not a claim that models think like people. See [System One](https://docs.typesafe.ai/concepts/system-one).
-
-| Role | Example |
+| Answer | What it covers |
 | --- | --- |
-| Focused judgment | Decide which department should receive a ticket |
-| Reasoning and generation | Investigate the issue and write a response |
-| Application logic | Check permissions, save the result, and assign the ticket |
+| Billing | Payments, invoices, and refunds |
+| Technical | Errors, broken features, and help using the product |
+| Product | Feature requests and product feedback |
+| Other | Requests outside these categories |
 
-### Training for decisions
+Jev returns a selected answer and a probability for every option. Here is an illustrative result, not a recorded API response:
 
-TypeSafe describes its training approach as Reinforcement Learning for Calibrated Decisions, or RLCD. Its aim is to produce useful decisions and probabilities that reflect how often those decisions are correct.
+| Answer | Probability |
+| --- | ---: |
+| Billing | 94% |
+| Technical | 2% |
+| Product | 1% |
+| Other | 3% |
 
-Calibration describes groups of predictions. For a well-calibrated model, outcomes assigned about 80% probability should occur about 80% of the time across comparable cases. That does not guarantee any individual answer, and it needs to be checked on the data your application handles. See the [TypeSafe AI primer](https://docs.typesafe.ai/introduction/machine-learning-primer).
-
-### State, questions, and answer types
-
-The API calls the information being evaluated the **state**. It can contain text or structured text data, such as a ticket's title and message.
-
-A **question** describes the judgment to make. Its instructions and criteria define what the answer means.
-
-| Type | Use it to ask | Example |
-| --- | --- | --- |
-| Noul | Is this statement true? | Does the customer explicitly request a refund? |
-| Choice | Which option fits? | Which department should handle this ticket? |
-| Score | Where does this fit on an ordered scale? | How much does the issue block someone's work? |
-
-Noul returns the estimated probability of yes. Choice returns an option and a distribution across the options. Score returns a position on a scale and a distribution across its levels. Choice and Score also include a confidence statistic. See [Noul](https://docs.typesafe.ai/primitives/noul), [Choice](https://docs.typesafe.ai/primitives/choice), and [Score](https://docs.typesafe.ai/primitives/score).
-
-### Ask small questions and combine the results
-
-Several questions can be evaluated in one request. Each reads the same state independently. One question does not receive another question's answer.
-
-For a support ticket, department and priority are separate judgments. Your code combines them to decide where the ticket appears. If a later question needs an earlier answer, use a separate call with that answer included in its state.
+The selected answer is Billing. Our code can route the ticket automatically if its selected probability is at least 80%. Below that threshold, it can send the ticket for review.
 
 ```mermaid
 flowchart LR
-    T[Ticket] --> D[Department question]
-    T --> P[Priority question]
-    D --> R[Application rules]
-    P --> R
-    R --> Q[Queue or review]
-    style D fill:#dbeafe,stroke:#2563eb,color:#172554
-    style P fill:#dbeafe,stroke:#2563eb,color:#172554
-    style R fill:#dcfce7,stroke:#16a34a,color:#14532d
+    T[Customer ticket] --> J[Jev: choose a team]
+    J --> P{Selected probability at least 80%?}
+    P -->|Yes| A[Assign to selected team]
+    P -->|No| R[Send for review]
 ```
 
-Clear criteria matter. Engineering might own the company's production systems, while IT Support owns employee access and devices. Mentioning a developer tool should not decide the department on its own.
+Jev supplies the answer and probabilities. Our application supplies the threshold, saves the ticket, and assigns the team. Classifying a refund request does not issue a refund.
 
-### Probability, confidence, and review
+### What goes into the request?
 
-For Choice, the selected probability is the probability assigned to the chosen option. The separate `confidence` field summarizes how concentrated the whole distribution is. Our demos use the selected probability for their thresholds.
+The API uses three terms:
 
-A review threshold is an application rule. It should depend on the consequences of a mistake and the results you observe on representative examples. A confident answer can still be wrong, and a vague message does not always produce low probability. See [TypeSafe confidence](https://docs.typesafe.ai/confidence).
+| Term | Meaning | In this example |
+| --- | --- | --- |
+| State | The text or structured text data to evaluate | The ticket title and message |
+| Instructions | The question to answer | Which team should handle this ticket? |
+| Criteria | Descriptions of the options or levels | Billing covers payments, invoices, and refunds |
 
-### What Jev does not do
+A request also specifies the model and a name for each question so your code can find its answer. Noul questions do not need a list of criteria.
 
-Jev does not write replies, generate code, or explain its reasoning. Its current API accepts text input, including structured text data; it does not accept images, audio, or video. See [System One](https://docs.typesafe.ai/concepts/system-one).
+Supply the information needed to answer the question. A ticket that says "It still doesn't work" may need earlier messages or reproduction steps. Jev only evaluates the state you send; it does not fetch those details for you. See the [TypeSafe introduction](https://docs.typesafe.ai/introduction).
 
-A typed answer does not prove that the decision is correct. Detecting a refund request does not establish that a refund is allowed. The application still needs policy checks, permissions, and error handling.
+### Choose the answer type
+
+| Type | Question | Returned value |
+| --- | --- | --- |
+| Noul | Does the customer explicitly request a refund? | A yes probability, such as `0.92` |
+| Choice | Which team should handle this ticket? | One category, plus probabilities for every option |
+| Score | How much does the issue block work? | A numeric score, plus probabilities for each defined level |
+
+**Noul returns a number, not a Boolean.** An illustrative value of `0.92` means an estimated 92% probability of yes. Your code could accept values at least 0.9, reject values at most 0.1, and review everything between. These cutoffs are your rules. See [Noul](https://docs.typesafe.ai/primitives/noul).
+
+**Choice selects one option.** For the Billing example, code reads the selected label and then looks up that label's probability:
+
+```python
+answer = response.choices["department"]
+department = answer.choice
+probability = answer.probabilities[department]
+```
+
+`department` is the question name chosen for this example. Each category needs a clear description. "Other" means the request falls outside the named categories; it does not mean the model is unsure. See [Choice](https://docs.typesafe.ai/primitives/choice).
+
+**Score uses an ordered scale.** For work impact, we can define:
+
+| Level | Description |
+| --- | --- |
+| 0 | Work can continue without a workaround |
+| 1 | Work can continue with a workaround |
+| 2 | Work is blocked and there is no workaround |
+
+With illustrative probabilities of 10%, 60%, and 30%, the score is:
+
+```text
+(0 × 0.10) + (1 × 0.60) + (2 × 0.30) = 1.2
+```
+
+This is a weighted average of the level numbers. It is not a percentage of users affected. A score of 1 could mean all probability is on level 1, or half is on level 0 and half on level 2. Inspect the probabilities alongside the score. See [Score](https://docs.typesafe.ai/primitives/score).
+
+Use Choice when you need one named category. Use Score when a position on a defined scale is useful, for example when ranking reports by work impact.
+
+### Ask one thing per question
+
+"What should we do with this ticket?" mixes several decisions. Split it into questions your code can use:
+
+- Which department should handle it?
+- What priority does it deserve?
+- Does it contain enough information to investigate?
+
+You can mix question types in one request. Each question reads the same state independently. It does not see the other questions' answers.
+
+```mermaid
+flowchart LR
+    T[Ticket text] --> D[Choice: department]
+    T --> P[Choice: priority]
+    T --> I[Noul: enough information?]
+    D --> C[Python checks results]
+    P --> C
+    I --> C
+    C --> A[Assign, review, or request details]
+```
+
+If a later question needs an earlier answer, make another request with that answer included in the state. TypeSafe recommends asking specific questions and combining their results in code. See [the introduction](https://docs.typesafe.ai/introduction).
+
+Write criteria that separate the answers. In a tech company, IT Support might handle employee devices and access, while Engineering handles bugs in the company's product. An engineer asking for GitHub access should go to IT Support. The word "engineer" alone should not determine the department.
+
+### Use probabilities to decide when to review
+
+A label tells us where a ticket might belong. Its probability helps us decide whether to assign it automatically.
+
+Our demo uses an 80% selected-probability threshold. That is a starting setting, not a measured guarantee. Raising it generally sends more tickets for review. Test whether the tickets you still accept automatically are classified accurately enough.
+
+Choice and Score also return `confidence`. This is a statistic derived from how the probabilities are distributed. It is a separate value from the selected option's probability. Our demos use the selected probability for their review rules. See [confidence](https://docs.typesafe.ai/confidence).
+
+TypeSafe calls its training approach Reinforcement Learning for Calibrated Decisions, or RLCD. Calibration means that, across comparable predictions, answers assigned about 80% probability should be correct about 80% of the time. You need many labeled examples to check that. One confident answer can still be wrong. See the [TypeSafe AI primer](https://docs.typesafe.ai/introduction/machine-learning-primer).
+
+### When should you use Jev?
+
+| Need | Approach to consider |
+| --- | --- |
+| Check whether an invoice is past its due date | Ordinary code comparing dates |
+| Decide whether an email disputes an invoice | Jev interpreting the message against defined criteria |
+| Investigate the dispute and draft a reply | A language model with the necessary information and tools |
+
+A general-purpose language model can also classify text and return structured output. Jev provides an API built around these question types and their probabilities. Compare accuracy, response time, and total cost on the same examples before choosing it.
+
+TypeSafe calls Jev a System One model, borrowing the name for fast thinking from *Thinking, Fast and Slow*. A reasoning model can do the longer investigation after Jev routes the request. This describes their roles in the workflow; it does not mean they think like people.
+
+Jev does not write replies, generate code, or explain its reasoning. Its current API accepts text and structured text data, not images, audio, or video. Your application still needs permissions, business rules, and handling for failed API calls. See [System One](https://docs.typesafe.ai/concepts/system-one).
 
 ## Demo: Python question types
 
-Three small files show the request and response for each type. They use the TypeSafe Python SDK and real API calls with invented tickets.
+Three short files show real API calls using invented tickets:
 
 | Example | What it demonstrates |
 | --- | --- |
-| [01-noul.py](../src/01-noul.py) | Detect an explicit refund request and use its probability to choose a next step |
-| [02-choice.py](../src/02-choice.py) | Select billing, technical, product, or other; flag a selected probability below 0.8 for review |
-| [03-score.py](../src/03-score.py) | Assess whether work can continue normally, needs a workaround, or is blocked |
+| [01-noul.py](../src/01-noul.py) | Detect an explicit refund request and use its probability to choose the next step |
+| [02-choice.py](../src/02-choice.py) | Select billing, technical, product, or other; review results below 80% |
+| [03-score.py](../src/03-score.py) | Score work impact using normal work, a workaround, and blocked work as levels |
 
-Different probability distributions can produce the same score. Read the probabilities alongside the result.
-
-Setup and run commands are in the [repository README](../README.md#run-the-python-examples).
+The [README](../README.md#run-the-python-examples) covers uv setup and the TypeSafe API key. These examples call the hosted API.
 
 ## Demo: support ticket app
 
-The [support app](../demos/support-desk/README.md) is a Python and React application with SQLite storage. Creating a ticket automatically asks Jev two Choice questions: which department should receive it, and what priority it deserves.
+The [support app](../demos/support-desk/README.md) uses Python, React, and SQLite. Creating a ticket automatically asks two Choice questions: department and priority.
 
-Departments are HR, Finance, Engineering, IT Support, and Other. Priorities are Low, Normal, High, and Critical. The queue shows each selected label and its probability. If either probability is below 80%, the ticket appears in Needs review.
+Departments are HR, Finance, Engineering, IT Support, and Other. Priorities are Low, Normal, High, and Critical. The queue shows both labels and their selected probabilities. If either probability is below 80%, the ticket needs review.
 
-An employee blocked from accessing GitHub and a production outage affecting customers show why department and priority need clear definitions. Other is a category for requests outside the named departments; it is separate from uncertainty.
-
-Tickets are saved before classification. If the API call fails, the message remains available for retry. The app classifies requests but does not carry out business actions.
+Compare an employee who cannot access GitHub with a production outage affecting customers. The app saves tickets before classification, so an API failure leaves the ticket available for retry.
 
 ## Demo: Codex model router
 
-The [Codex router skill](../demos/codex-router/README.md) classifies a task as routine, standard, or complex. A Python script maps that class to a configured model and reasoning level. Codex then creates a new task with a complete brief.
+The [Codex router skill](../demos/codex-router/README.md) uses Jev to classify a task as routine, standard, or complex. Python maps the category to a configured model and reasoning level. Codex opens a new task with that model and a complete brief.
 
-```mermaid
-flowchart LR
-    A[Task brief] --> B[Jev classifies complexity]
-    B --> C[Python selects a configured model]
-    C --> D[Codex opens a new task]
-    style B fill:#dbeafe,stroke:#2563eb,color:#172554
-    style C fill:#dcfce7,stroke:#16a34a,color:#14532d
-    style D fill:#f3e8ff,stroke:#9333ea,color:#581c87
-```
+The demo asks for a read-only explanation of the Choice example. It shows the classification probability, selected model, and new task. Low probability or an API failure selects the configured complex route.
 
-The demo asks for a read-only explanation of the Choice example. It shows the selected model, classification probability, and the new task that performs the work.
-
-Low probability or an API failure selects the configured complex route. The model mapping can be changed to match the account's available models. This is a routing heuristic, not proof that the selected model is the cheapest or will complete the task successfully.
-
-The full skill requires Codex desktop task-creation tools. It opens a separate conversation rather than changing the model in the current one. The Python classifier also runs on its own in a terminal.
+This selects from a model mapping you control; it does not prove which model is cheapest or will succeed. Creating the new task requires Codex desktop tools. The Python classifier also runs in a terminal.
 
 ## Summary
 
-Jev provides focused judgments that can be used in ordinary application logic. Noul answers a yes-or-no question, Choice selects a category, and Score places an input on an ordered scale.
+To try Jev in your own application, choose one question and describe its possible answers. Collect examples with known results, including ambiguous and incomplete inputs.
 
-The support app uses those judgments to organize work. The Codex skill uses them to select a model for a new task. In both cases, code defines the allowed actions and handles uncertain or failed results.
-
-To apply the same pattern, choose one decision in your own workflow. Write clear criteria, collect examples with expected answers, and check both the decisions and their probabilities. Measure the full workflow before making claims about reliability, speed, or savings.
+Measure incorrect automatic decisions, how often review is needed, response time, and cost. If you change the criteria or threshold, check the result on separate examples. Those measurements tell you whether Jev is useful for your application.
