@@ -1,0 +1,6 @@
+interface:
+  display_name: "Codex Router"
+  short_description: "Use Jev to select a model and open a new Codex task"
+  default_prompt: "Use $codex-router to choose a model and create a new task for my request."
+policy:
+  allow_implicit_invocation: false

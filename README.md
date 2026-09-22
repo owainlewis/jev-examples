@@ -9,6 +9,7 @@ Three small Python examples and a working ticket queue.
 | [src/03-score.py](src/03-score.py) | Score: assess impact against an ordered rubric |
 | [docs/VIDEO.md](docs/VIDEO.md) | The video walkthrough, from the first API call to the app |
 | [demos/support-desk](demos/support-desk/README.md) | Python, React, and SQLite ticket queue with automatic department and priority classification |
+| [demos/codex-router](demos/codex-router/README.md) | Shareable skill: Jev selects a model and Codex creates a new task |
 
 ## Run the Python examples
 

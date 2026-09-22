@@ -1,0 +1,8 @@
+{
+  "min_probability": 0.8,
+  "routes": {
+    "routine": {"model": "gpt-5.6-luna", "reasoning": "low"},
+    "standard": {"model": "gpt-5.6-terra", "reasoning": "medium"},
+    "complex": {"model": "gpt-6-astra", "reasoning": "high"}
+  }
+}
