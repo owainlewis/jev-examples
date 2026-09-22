@@ -21,8 +21,8 @@ We ask: **Which team should handle this ticket?** We define four possible answer
 | Answer | What it covers |
 | --- | --- |
 | Billing | Payments, invoices, and refunds |
-| Technical | Errors and broken features |
-| Product | Questions about features and how to use them |
+| Technical | Errors, broken features, and help using the product |
+| Product | Feature requests and product feedback |
 | Other | Requests outside these categories |
 
 Jev returns a selected answer and a probability for every option. Here is an illustrative result, not a recorded API response:
@@ -68,7 +68,7 @@ Supply the information needed to answer the question. A ticket that says "It sti
 | Choice | Which team should handle this ticket? | One category, plus probabilities for every option |
 | Score | How much does the issue block work? | A numeric score, plus probabilities for each defined level |
 
-**Noul returns a number, not a Boolean.** An illustrative value of `0.92` means an estimated 92% probability of yes. Your code could accept values above 0.9, reject values below 0.1, and review everything between. These cutoffs are your rules. See [Noul](https://docs.typesafe.ai/primitives/noul).
+**Noul returns a number, not a Boolean.** An illustrative value of `0.92` means an estimated 92% probability of yes. Your code could accept values at least 0.9, reject values at most 0.1, and review everything between. These cutoffs are your rules. See [Noul](https://docs.typesafe.ai/primitives/noul).
 
 **Choice selects one option.** For the Billing example, code reads the selected label and then looks up that label's probability:
 
