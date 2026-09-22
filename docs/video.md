@@ -4,7 +4,7 @@
 
 Jev is an AI model from TypeSafe AI. It takes text and returns structured output. You provide a question and define the kind of answer you need: a yes/no probability, a category, or a score.
 
-For example, you can ask whether a customer wants a refund, which department should receive a ticket, or how much a problem blocks someone's work. Your code reads the result and decides what to do next.
+For example, you can ask whether a customer is unable to access their workspace, which department should receive a ticket, or how much a problem blocks someone's work. Your code reads the result and decides what to do next.
 
 This tutorial explains the three question types, then shows them in Python, a support ticket app, and a Codex model router. The code and setup instructions are included in this repository.
 
@@ -14,13 +14,13 @@ This tutorial explains the three question types, then shows them in Python, a su
 
 Suppose a customer sends this ticket:
 
-> I was charged twice for my subscription. Please refund the duplicate payment.
+> I cannot sign in to my workspace. Every attempt shows a server error, so I cannot access my projects.
 
 We ask: **Which team should handle this ticket?** We define four possible answers:
 
 | Answer | What it covers |
 | --- | --- |
-| Billing | Payments, invoices, and refunds |
+| Billing | Payments, invoices, and subscription charges |
 | Technical | Errors, broken features, and help using the product |
 | Product | Feature requests and product feedback |
 | Other | Requests outside these categories |
@@ -29,12 +29,12 @@ Jev returns a selected answer and a probability for every option. Here is an ill
 
 | Answer | Probability |
 | --- | ---: |
-| Billing | 94% |
-| Technical | 2% |
+| Billing | 2% |
+| Technical | 94% |
 | Product | 1% |
 | Other | 3% |
 
-The selected answer is Billing. Our code can route the ticket automatically if its selected probability is at least 80%. Below that threshold, it can send the ticket for review.
+The selected answer is Technical. Our code can route the ticket automatically if its selected probability is at least 80%. Below that threshold, it can send the ticket for review.
 
 ```mermaid
 flowchart LR
@@ -44,7 +44,7 @@ flowchart LR
     P -->|No| R[Send for review]
 ```
 
-Jev supplies the answer and probabilities. Our application supplies the threshold, saves the ticket, and assigns the team. Classifying a refund request does not issue a refund.
+Jev supplies the answer and probabilities. Our application supplies the threshold, saves the ticket, and assigns the team. Classifying an access problem does not change the customer's account permissions.
 
 ### What goes into the request?
 
@@ -54,7 +54,7 @@ The API uses three terms:
 | --- | --- | --- |
 | State | The text or structured text data to evaluate | The ticket title and message |
 | Instructions | The question to answer | Which team should handle this ticket? |
-| Criteria | Descriptions of the options or levels | Billing covers payments, invoices, and refunds |
+| Criteria | Descriptions of the options or levels | Technical covers errors, broken features, and help using the product |
 
 A request also specifies the model and a name for each question so your code can find its answer. Noul questions do not need a list of criteria.
 
@@ -64,13 +64,13 @@ Supply the information needed to answer the question. A ticket that says "It sti
 
 | Type | Question | Returned value |
 | --- | --- | --- |
-| Noul | Does the customer explicitly request a refund? | A yes probability, such as `0.92` |
+| Noul | Is the customer unable to access their workspace? | A yes probability, such as `0.92` |
 | Choice | Which team should handle this ticket? | One category, plus probabilities for every option |
 | Score | How much does the issue block work? | A numeric score, plus probabilities for each defined level |
 
 **Noul returns a number, not a Boolean.** An illustrative value of `0.92` means an estimated 92% probability of yes. Your code could accept values at least 0.9, reject values at most 0.1, and review everything between. These cutoffs are your rules. See [Noul](https://docs.typesafe.ai/primitives/noul).
 
-**Choice selects one option.** For the Billing example, code reads the selected label and then looks up that label's probability:
+**Choice selects one option.** For the Technical example, code reads the selected label and then looks up that label's probability:
 
 ```python
 answer = response.choices["department"]
@@ -153,7 +153,7 @@ Three short files show real API calls using invented tickets:
 
 | Example | What it demonstrates |
 | --- | --- |
-| [01-noul.py](../src/01-noul.py) | Detect an explicit refund request and use its probability to choose the next step |
+| [01-noul.py](../src/01-noul.py) | Detect blocked workspace access and use its probability to choose the next step |
 | [02-choice.py](../src/02-choice.py) | Select billing, technical, product, or other; review results below 80% |
 | [03-score.py](../src/03-score.py) | Score work impact using normal work, a workaround, and blocked work as levels |
 
