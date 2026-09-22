@@ -33,3 +33,7 @@ Screenshots: [desktop queue](evidence/queue-desktop.png), [mobile review queue](
 ## Limits
 
 This is a local single-user recording demo, with no authentication or production hosting setup. No model accuracy estimate or threshold calibration is claimed. A vague message can still receive a high probability; the system flags probability below the threshold, not every objectively ambiguous message. Low and Normal are distinguished by the documented priority rubric. There is no automatic operational action after classification.
+
+## Minimalist shadcn/ui refinement
+
+The queue now uses official shadcn/ui React controls with Tailwind CSS v4. Five frontend tests, TypeScript/production build, formatting, and scoped whitespace checks pass. Browser checks covered the queue, review filter, expanded probability distributions, and sample selection in the new-ticket form at 1440px and 390px. Neither width overflowed; the browser reported no warnings or errors. No additional paid model request was needed for this styling change.

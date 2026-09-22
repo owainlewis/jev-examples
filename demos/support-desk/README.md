@@ -77,3 +77,7 @@ npm run format:check
 ```
 
 See [design](docs/design.md) and [verification](docs/verification.md). Implementation: `backend/classifier.py` defines the questions and threshold, `backend/app.py` owns HTTP requests, `backend/store.py` owns persistence, and `frontend/src/App.tsx` owns the queue.
+
+### UI components
+
+The React frontend uses shadcn/ui with Tailwind CSS v4 and a neutral theme. Shared controls live in `frontend/src/components/ui`; queue layout and theme tokens live in `frontend/src/style.css`. To add components, run `npx shadcn@latest add <component>` from `frontend`. Keep imports pointed at `@/lib/utils`.

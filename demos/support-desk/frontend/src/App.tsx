@@ -8,6 +8,14 @@ import {
   Plus,
   X,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@/components/ui/native-select";
 import "./style.css";
 
 type Decision = {
@@ -105,9 +113,13 @@ function Field({
   if (!value) return <span className="muted">Not classified</span>;
   return (
     <div className="field">
-      <span className={priority ? `priority ${value.choice}` : "department"}>
-        {label(value.choice)}
-      </span>
+      {priority ? (
+        <Badge variant="secondary" className={`priority ${value.choice}`}>
+          {label(value.choice)}
+        </Badge>
+      ) : (
+        <span className="department">{label(value.choice)}</span>
+      )}
       <span className="probability">{percent(value.probability)}</span>
       {value.needs_review && <span className="field-review">Needs review</span>}
     </div>
@@ -257,7 +269,7 @@ export function App() {
             <h1>Ticket queue</h1>
             <p>Every request finds the right department.</p>
           </div>
-          <button
+          <Button
             className="primary"
             disabled={busy || loading}
             onClick={() => {
@@ -268,13 +280,13 @@ export function App() {
           >
             <Plus size={17} />
             New ticket
-          </button>
+          </Button>
         </div>
         {error && (
           <div className="alert error" role="alert">
             {error}
             {!config && (
-              <button onClick={() => void load()}>Retry connection</button>
+              <Button onClick={() => void load()}>Retry connection</Button>
             )}
           </div>
         )}
@@ -294,7 +306,9 @@ export function App() {
           <form className="composer" onSubmit={create}>
             <div className="composer-heading">
               <h2>New ticket</h2>
-              <button
+              <Button
+                variant="ghost"
+                size="icon"
                 type="button"
                 className="icon-button"
                 aria-label="Cancel new ticket"
@@ -302,14 +316,14 @@ export function App() {
                 onClick={() => setCompose(false)}
               >
                 <X size={19} />
-              </button>
+              </Button>
             </div>
             <p>
               Jev will classify the department and priority when you create it.
             </p>
             <label className="example-label">
               Try an example
-              <select
+              <NativeSelect
                 defaultValue=""
                 disabled={busy}
                 onChange={(event) => {
@@ -320,19 +334,19 @@ export function App() {
                   }
                 }}
               >
-                <option value="" disabled>
+                <NativeSelectOption value="" disabled>
                   Choose a sample request
-                </option>
+                </NativeSelectOption>
                 {examples.map((example, index) => (
-                  <option value={index} key={example.name}>
+                  <NativeSelectOption value={index} key={example.name}>
                     {example.name}
-                  </option>
+                  </NativeSelectOption>
                 ))}
-              </select>
+              </NativeSelect>
             </label>
             <label>
               Subject
-              <input
+              <Input
                 autoFocus
                 required
                 maxLength={160}
@@ -344,7 +358,7 @@ export function App() {
             </label>
             <label>
               Message
-              <textarea
+              <Textarea
                 required
                 maxLength={8000}
                 rows={4}
@@ -356,31 +370,33 @@ export function App() {
             </label>
             <div className="form-footer">
               <span>Two classifications. One Jev request.</span>
-              <button className="primary" disabled={busy}>
+              <Button className="primary" disabled={busy}>
                 {busy ? (
                   <LoaderCircle size={16} className="spinner" />
                 ) : (
                   <ArrowRight size={16} />
                 )}{" "}
                 {busy ? "Creating and classifying…" : "Create ticket"}
-              </button>
+              </Button>
             </div>
           </form>
         )}
         <div className="queue-toolbar">
           <div className="filters" role="group" aria-label="Ticket filter">
-            <button
+            <Button
+              variant="ghost"
               aria-pressed={filter === "all"}
               onClick={() => setFilter("all")}
             >
               All tickets <span>{tickets.length}</span>
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="ghost"
               aria-pressed={filter === "review"}
               onClick={() => setFilter("review")}
             >
               Needs review <span>{reviewCount}</span>
-            </button>
+            </Button>
           </div>
           <span className="threshold">
             Below {percent(config?.review_threshold ?? 0.8)} goes to review
@@ -466,14 +482,15 @@ function TicketRows({
     <>
       <tr className={expanded ? "selected" : ""}>
         <td data-label="Request">
-          <button
+          <Button
+            variant="ghost"
             className="ticket-title"
             aria-expanded={expanded}
             onClick={onSelect}
           >
             {ticket.subject}
             <ChevronDown size={16} />
-          </button>
+          </Button>
         </td>
         <td data-label="Department">
           <Field value={result?.department} />
@@ -482,11 +499,12 @@ function TicketRows({
           <Field value={result?.priority} priority />
         </td>
         <td data-label="Status">
-          <span
+          <Badge
+            variant="secondary"
             className={`status ${state === "Needs review" ? "review" : ticket.status}`}
           >
             {state}
-          </span>
+          </Badge>
         </td>
       </tr>
       {expanded && (
@@ -502,13 +520,13 @@ function TicketRows({
                   </div>
                 )}
                 {!result && ticket.status !== "running" && (
-                  <button disabled={busy} onClick={onRetry}>
+                  <Button disabled={busy} onClick={onRetry}>
                     {busy
                       ? "Classifying…"
                       : ticket.status === "failed"
                         ? "Retry classification"
                         : "Classify ticket"}
-                  </button>
+                  </Button>
                 )}
                 {ticket.status === "running" && (
                   <p className="muted">Classification is in progress.</p>
