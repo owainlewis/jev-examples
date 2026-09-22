@@ -1,0 +1,6 @@
+.venv/
+.env
+instance/
+frontend/node_modules/
+frontend/dist/
+*.tsbuildinfo
