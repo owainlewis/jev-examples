@@ -10,6 +10,7 @@ Three small Python examples and a working ticket queue.
 | [docs/VIDEO.md](docs/VIDEO.md) | The video walkthrough, from the first API call to the app |
 | [demos/support-desk](demos/support-desk/README.md) | Python, React, and SQLite ticket queue with automatic department and priority classification |
 | [demos/codex-router](demos/codex-router/README.md) | Shareable skill: Jev selects a model and Codex creates a new task |
+| [demos/trading-sim](demos/trading-sim/README.md) | Live prices, Jev buy/hold/sell decisions, and a simulated portfolio |
 
 ## Run the Python examples
 
