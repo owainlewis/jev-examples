@@ -28,6 +28,8 @@ with TypeSafeClient(model="jev-1.13.0", timeout=30.0) as client:
 
 answer = response.choices["team"]
 print("Team:", answer.choice)
+probability = answer.probabilities[answer.choice]
+print("Selected team probability:", probability)
 print("Probabilities:", answer.probabilities)
 print("Confidence:", answer.confidence)
-print("Needs review:", answer.confidence < 0.8 or answer.choice == "other")
+print("Needs review:", probability < 0.8)
