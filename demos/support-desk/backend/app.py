@@ -2,7 +2,6 @@
 
 import os
 from pathlib import Path
-from typing import Literal
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
@@ -11,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from .classifier import MODEL, MODES, SPECS, classify, python_example
+from .classifier import MODEL, REVIEW_THRESHOLD, SCHEMA_VERSION, classify
 from .store import Conflict, MissingTicket, Store
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,13 +24,25 @@ class TicketInput(BaseModel):
     customer: str = Field(default="Demo customer", min_length=1, max_length=80)
 
 
-class RunInput(BaseModel):
-    mode: Literal["choice", "noul", "score", "combined"]
-
-
-class Correction(BaseModel):
-    team: Literal["billing", "technical", "account", "other"]
-    priority: Literal["standard", "urgent", "needs_review"]
+def public_ticket(ticket):
+    """Keep earlier demo data intact without showing obsolete labels as current."""
+    current = (
+        ticket["routing"] and ticket["routing"].get("schema_version") == SCHEMA_VERSION
+    )
+    runs = [run for run in ticket["runs"] if run["mode"] == "triage"]
+    latest = runs[0] if runs else None
+    return {
+        "id": ticket["id"],
+        "subject": ticket["subject"],
+        "body": ticket["body"],
+        "created_at": ticket["created_at"],
+        "classification": ticket["routing"] if current else None,
+        "status": latest["status"] if latest else "unclassified",
+        "error": latest["error"] if latest else None,
+        "elapsed_ms": latest["result"]["elapsed_ms"]
+        if latest and latest["result"]
+        else None,
+    }
 
 
 def create_app(database=None, classify_fn=None):
@@ -75,33 +86,27 @@ def create_app(database=None, classify_fn=None):
         return {
             "model": MODEL,
             "configured": bool(os.environ.get("TYPESAFE_API_KEY")),
-            "modes": {
-                mode: {
-                    "questions": {key: SPECS[key] for key in keys},
-                    "python": python_example(mode),
-                }
-                for mode, keys in MODES.items()
-            },
+            "review_threshold": REVIEW_THRESHOLD,
         }
 
     @application.get("/api/tickets")
     def tickets():
-        return store.list()
+        return [public_ticket(ticket) for ticket in store.list()]
 
     @application.post("/api/tickets", status_code=201)
     def create_ticket(data: TicketInput):
         ticket = store.create(data.model_dump())
-        return run_ticket(ticket, "combined", raise_on_failure=False)
+        return public_ticket(run_ticket(ticket, raise_on_failure=False))
 
     @application.post("/api/tickets/{identifier}/runs")
-    def run(identifier: str, data: RunInput):
+    def run(identifier: str):
         ticket = store.get(identifier)
-        return run_ticket(ticket, data.mode)
+        return public_ticket(run_ticket(ticket))
 
-    def run_ticket(ticket, mode, raise_on_failure=True):
-        run_id = store.claim(ticket["id"], mode)
+    def run_ticket(ticket, raise_on_failure=True):
+        run_id = store.claim(ticket["id"], "triage")
         try:
-            result = provider(ticket, mode)
+            result = provider(ticket)
         except Exception:
             # Provider errors can contain request details. Never return them to the browser.
             error = "Jev could not complete the request. Check the backend API key and connection, then try again. Your ticket is saved."
@@ -115,14 +120,6 @@ def create_app(database=None, classify_fn=None):
                 409, "This request expired. Refresh the ticket and run it again."
             )
         return completed
-
-    @application.patch("/api/tickets/{identifier}/correction")
-    def correct(identifier: str, data: Correction):
-        return store.correct(identifier, data.model_dump())
-
-    @application.post("/api/reset")
-    def reset():
-        return store.reset()
 
     build = ROOT / "frontend" / "dist"
     if build.exists():

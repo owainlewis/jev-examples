@@ -1,12 +1,10 @@
-# Jev Support Desk
+# Jev ticket queue
 
-A standalone Python + React + SQLite demo for showing **Choice, Noul, Score, and Combined** on the same customer support ticket. The tutorial examples elsewhere in this repository are separate; this app imports none of them.
+A small internal request queue for a tech company. Create a ticket and Jev classifies **Department** and **Priority** in one real API request. Both results show the selected category's probability. Any field below 80% is flagged and the ticket appears in Needs review.
 
-## Start the demo
+## Run locally
 
-Requires Python 3.11+ and Node 22.12+ (or Node 24).
-
-From this folder:
+Requires Python 3.11+ and Node 22.12+ (or Node 24). From this folder:
 
 ```bash
 python3 -m venv .venv
@@ -15,87 +13,67 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Put your TypeSafe key in `.env`. The backend reads this folder's `.env`, not the tutorial's environment file. An exported `TYPESAFE_API_KEY` takes precedence. Restart the backend after changing it.
-
-Build the frontend:
+Add your `TYPESAFE_API_KEY` to `.env`. Exported environment variables take precedence. Restart the backend after changing the key.
 
 ```bash
 cd frontend
 npm ci
 npm run build
 cd ..
-```
-
-Start the app:
-
-```bash
 uvicorn backend.app:app --host 127.0.0.1 --port 8000
 ```
 
-Open **http://127.0.0.1:8000**. Four synthetic tickets are created on first startup. Creating a ticket automatically calls Jev once with Combined and saves its team and priority. The four initial samples remain unclassified until you choose Classify sample. Explore question types reveals the optional teaching controls; changing mode does not call Jev. Each click uses your TypeSafe account.
+Open http://127.0.0.1:8000. For frontend development, keep the backend running and run `npm run dev` inside `frontend`; open port 5173. The Vite dev server proxies `/api` to port 8000.
 
-For frontend development, keep that backend running and use a second terminal:
+## The two questions
 
-```bash
-cd frontend
-npm run dev
-```
+Both questions use **Choice**, independently against the same ticket.
 
-Open http://127.0.0.1:5173. Vite proxies `/api` to port 8000. `npm run preview` alone does not provide a backend; use the FastAPI server for the built app.
+| Department | Owns |
+| --- | --- |
+| HR | Benefits, leave, recruiting, people policies, workplace concerns |
+| Finance | Invoices, expenses, payments, budgets, payroll payment discrepancies |
+| Engineering | The company's own product and production systems |
+| IT Support | Employee devices, software, internal tools, passwords, and access |
+| Other | Requests clearly outside those departments |
 
-## The four modes
+| Priority | Meaning |
+| --- | --- |
+| Low | Routine request with no stated time pressure or disruption |
+| Normal | Needs attention, but work can continue |
+| High | An employee is blocked, or an explicit deadline is at risk |
+| Critical | Widespread outage, active security incident, or immediate serious business impact |
 
-| Mode | Question | Result | Saved routing |
-| --- | --- | --- | --- |
-| Choice | Which team handles the main request? | Selected team, probabilities, confidence | Unchanged |
-| Noul | Does the customer request a refund? | Probability true, with its complement false | Unchanged |
-| Score | How much is work blocked? | Ordered impact distribution and weighted score, 0–2 | Unchanged |
-| Combined | All three, plus whether impact is stated | Four answers in one request, then Python policy | Applied |
+The largest category probability selects the displayed label. A field below 0.8 gets a Needs review label, and either uncertain field puts the whole ticket in the review queue. The suggested label and its probability stay visible. Exactly 0.8 passes. Other is a real category, not an uncertainty fallback. Jev's separate `confidence` statistic is not used for this rule.
 
-Single modes preview a decision. Combined applies rules: team confidence below 0.8, an `other` team, missing impact evidence (`impact_stated < 0.9`), or impact confidence below 0.8 sends the ticket to Needs review. Otherwise, impact scores at least 1.5 get Urgent priority; other scores get Standard. These are teaching thresholds, not calibrated guarantees. A refund flag records intent and never triggers a payment.
+The threshold is a demonstration starting point, not a calibrated accuracy guarantee. The model can be confidently wrong. In particular, a vague or exaggerated message is not guaranteed to produce a low probability; show its actual response rather than inventing a result.
 
-Questions run independently against the same ticket. The impact question cannot read the answer to `impact_stated`; Python combines them afterward. Score is the weighted average of zero-based rubric positions. Confidence measures the returned distribution, not demonstrated accuracy on your customers.
+## Record the demo
 
-Expand **Inspect the question**, **Python code**, or **Raw response** to explain the request and result. Python examples are generated from the app's question definitions and use a clearly labelled sample ticket.
+1. Click New ticket and select the HR example. Create it and inspect its department and priority.
+2. Create the GitHub access example. Explain why employee access belongs to IT Support, even though GitHub is used by engineers.
+3. Create the production outage example and compare High with Critical.
+4. Try an unclear message. If either field is below 80%, show the Needs review queue.
+5. Click a request to inspect the original message and both probability distributions.
 
-## Recording sequence
+The example picker fills the form only. Nothing calls the API until Create ticket. Each created ticket calls Jev once; a failed classification preserves its message and offers Retry classification. There is no type explorer, code panel, manual correction workflow, or automatic business action.
 
-1. Click New ticket, enter a customer message, and click Create ticket. Jev automatically classifies it and saves the team and priority.
-2. Create a clear refund, an outage, and a vague request. Show automatic routing and human review.
-3. Filter by team. Use Correct to save a human decision separately from the model result.
-4. For the API lesson, click Explore question types. Switch between Choice, Noul, Score, and Combined on the same ticket, then explicitly run a preview. Python code, question details, and raw responses are available here.
-5. Click Back to inbox to return to the simple view. Reload to demonstrate persistence.
-6. Reset demo restores unclassified synthetic presets after confirmation; it never spends API credits by itself.
+## Data and migration
 
-Actual model answers may vary. Timing is measured around the SDK request and is not a benchmark comparison. The app uses the real `typesafe-sdk` against `https://api.typesafe.ai`; it has no simulated response mode. Account balance is not available in these classification responses. Check your TypeSafe console for balance and usage.
+SQLite lives at `instance/desk.sqlite3`, ignored by Git. `SUPPORT_DESK_DB` selects another file. Fresh databases start with an empty queue. Older demo tickets remain saved; old team/refund/impact results are not shown as if they used the new taxonomy. Open an old ticket and choose Classify ticket to apply the new questions. Historical raw runs remain in SQLite.
 
-## Data, recovery, and boundaries
+One request per ticket can be active. SDK requests time out after 30 seconds without automatic retry. Abandoned run claims expire after 90 seconds, and late responses cannot overwrite newer results. Reloading during an active request starts polling for completion.
 
-SQLite lives at `instance/desk.sqlite3`, ignored by Git. Set `SUPPORT_DESK_DB` to use another database. Tickets are saved before classification. A classification failure during creation still returns the saved ticket, with the error and Retry classification visible. Failures leave prior results and routing intact and allow a new run. Runs persist in SQLite; the interface shows the latest run for the selected mode. A new failed run shows its error rather than presenting an older success as current.
+This is a local recording demo, not a hosted multi-user service. Keep it bound to loopback. Ticket subject/body are sent to TypeSafe; the key remains in Python. The app uses `typesafe-sdk` against `https://api.typesafe.ai`, with no simulated results. Check your TypeSafe console for balance and usage.
 
-One run per ticket can be active. Calls have a 30-second timeout with no automatic retry. Abandoned runs expire after 90 seconds; a late response cannot replace newer results. Reset refuses while any unexpired run is active. The interface polls for a run already in progress after reload.
-
-This is a loopback-only recording demo with no login system. Keep it bound to `127.0.0.1`. It sends ticket subject/body to TypeSafe. The API key stays in Python. There is no mailbox connection, refund execution, generated reply, or production deployment configuration.
-
-## Checks
+## Verify
 
 ```bash
 .venv/bin/python -W error::ResourceWarning -m unittest discover -s tests -v
-.venv/bin/pip check
 cd frontend
 npm run test
 npm run build
-npx prettier --check src package.json tsconfig.json vite.config.ts index.html
+npm run format:check
 ```
 
-See [design](docs/design.md) for acceptance criteria and [verification](docs/verification.md) for recorded test evidence.
-
-## Source map
-
-- `backend/classifier.py`: question definitions, runnable Python examples, Jev call, and routing policy.
-- `backend/store.py`: SQLite tickets, run history, concurrency claims, and seed tickets.
-- `backend/app.py`: FastAPI endpoints and built frontend hosting.
-- `frontend/src/App.tsx`: ticket inbox, mode switch, results, forms, and corrections.
-- `frontend/src/style.css`: responsive interface.
-
-References: [TypeSafe primitives](https://docs.typesafe.ai/introduction), [FastAPI](https://fastapi.tiangolo.com/tutorial/first-steps/), [Vite](https://vite.dev/guide/).
+See [design](docs/design.md) and [verification](docs/verification.md). Implementation: `backend/classifier.py` defines the questions and threshold, `backend/app.py` owns HTTP requests, `backend/store.py` owns persistence, and `frontend/src/App.tsx` owns the queue.

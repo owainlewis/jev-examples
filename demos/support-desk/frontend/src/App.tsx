@@ -1,119 +1,81 @@
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   ArrowRight,
   Check,
   ChevronDown,
-  Code2,
   Inbox,
-  Layers3,
   LoaderCircle,
-  Mail,
   Plus,
-  RotateCcw,
-  ShieldCheck,
-  SlidersHorizontal,
-  Sparkles,
   X,
 } from "lucide-react";
 import "./style.css";
 
-type Mode = "choice" | "noul" | "score" | "combined";
-type Routing = {
-  team: string;
-  priority: string;
-  review_required?: boolean;
-  reasons?: string[];
-  refund?: string;
+type Decision = {
+  choice: string;
+  probability: number;
+  probabilities: Record<string, number>;
+  needs_review: boolean;
 };
-type Answer = {
-  choice?: string;
-  confidence?: number;
-  probabilities?: Record<string, number> | number[];
-  noul?: number;
-  score?: number;
-};
-type Result = {
-  raw: { answers: Record<string, Answer> };
-  elapsed_ms: number;
-  policy: Routing | null;
-};
-type Run = {
-  id: string;
-  mode: Mode;
-  status: string;
-  result: Result | null;
-  error: string | null;
+type Classification = {
+  department: Decision;
+  priority: Decision;
+  review_required: boolean;
 };
 type Ticket = {
   id: string;
   subject: string;
   body: string;
-  customer: string;
-  preset: string | null;
-  routing: Routing | null;
-  correction: Routing | null;
-  runs: Run[];
+  created_at: number;
+  classification: Classification | null;
+  status: string;
+  error: string | null;
+  elapsed_ms: number | null;
 };
-type Question = {
-  type: string;
-  instructions: string;
-  criteria?: Record<string, string> | string[];
-};
-type Config = {
-  configured: boolean;
-  model: string;
-  modes: Record<Mode, { questions: Record<string, Question>; python: string }>;
-};
-const MODES: Mode[] = ["choice", "noul", "score", "combined"];
+type Config = { configured: boolean; model: string; review_threshold: number };
 const names: Record<string, string> = {
-  choice: "Choice",
-  noul: "Noul",
-  score: "Score",
-  combined: "Combined",
-  billing: "Billing",
-  technical: "Technical",
-  account: "Account",
+  hr: "HR",
+  finance: "Finance",
+  engineering: "Engineering",
+  it_support: "IT Support",
   other: "Other",
-  standard: "Standard",
-  urgent: "Urgent",
-  needs_review: "Needs review",
-  all: "All tickets",
-  unclassified: "Unclassified",
-};
-const modeCopy: Record<Mode, { title: string; description: string }> = {
-  choice: {
-    title: "Which team should handle this?",
-    description: "Choose one option from a defined set.",
-  },
-  noul: {
-    title: "Is the customer requesting a refund?",
-    description: "Measure the probability that a statement is true.",
-  },
-  score: {
-    title: "How much is their work affected?",
-    description: "Evaluate impact against an ordered rubric.",
-  },
-  combined: {
-    title: "One ticket. All three types.",
-    description:
-      "Ask four independent questions, then apply routing rules in Python.",
-  },
+  low: "Low",
+  normal: "Normal",
+  high: "High",
+  critical: "Critical",
 };
 const label = (value: string) => names[value] ?? value;
 const percent = (value: number) => `${(value * 100).toFixed(1)}%`;
-const effective = (ticket: Ticket) => ticket.correction ?? ticket.routing;
-const queueOf = (ticket: Ticket) => {
-  const route = effective(ticket);
-  return !route
-    ? "unclassified"
-    : route.priority === "needs_review"
-      ? "needs_review"
-      : route.team;
-};
+const examples = [
+  {
+    name: "HR · routine request",
+    subject: "Where can I find our parental leave policy?",
+    body: "I would like to read the company's parental leave policy. This is a routine question with no deadline and no impact on my work.",
+  },
+  {
+    name: "Finance · invoice issue",
+    subject: "Incorrect supplier invoice total",
+    body: "A supplier invoice shows the wrong total. Could Finance check the calculation? Work can continue and there is no payment deadline at risk.",
+  },
+  {
+    name: "IT Support · blocked employee",
+    subject: "I cannot sign in to GitHub",
+    body: "My company GitHub account is locked. I cannot access any repositories and cannot do my work. Only my account is affected. Please restore my access.",
+  },
+  {
+    name: "Engineering · production outage",
+    subject: "Our product is down for every customer",
+    body: "Our production API is returning 500 errors for all customers. Every customer is unable to use the product, and we are losing transactions right now. Please restore production service.",
+  },
+  {
+    name: "Unclear request",
+    subject: "I need help with a request",
+    body: "I am not sure who owns this. There is a problem with a request and somebody needs to look at it.",
+  },
+];
 async function api<T>(
   path: string,
   method = "GET",
-  data?: unknown,
+  body?: unknown,
 ): Promise<T> {
   const response = await fetch(`/api${path}`, {
     method,
@@ -121,144 +83,85 @@ async function api<T>(
       "Content-Type": "application/json",
       "X-Demo-Request": "support-desk",
     },
-    body: data === undefined ? undefined : JSON.stringify(data),
+    body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
     throw new Error(
       typeof error.detail === "string"
         ? error.detail
-        : `Request failed (${response.status}). Check the fields and try again.`,
+        : "The request failed. Check your input and try again.",
     );
   }
   return response.json();
 }
-function Bars({ values }: { values: [string, number][] }) {
+function Field({
+  value,
+  priority = false,
+}: {
+  value?: Decision;
+  priority?: boolean;
+}) {
+  if (!value) return <span className="muted">Not classified</span>;
   return (
-    <div className="bars">
-      {values.map(([name, value]) => (
-        <div className="bar-row" key={name}>
-          <div className="bar-label">
-            <span>{label(name)}</span>
-            <strong>{percent(value)}</strong>
-          </div>
-          <div className="bar-track">
-            <div
-              className="bar-fill"
-              style={{ width: `${Math.max(0, Math.min(100, value * 100))}%` }}
-            />
-          </div>
-        </div>
-      ))}
+    <div className="field">
+      <span className={priority ? `priority ${value.choice}` : "department"}>
+        {label(value.choice)}
+      </span>
+      <span className="probability">{percent(value.probability)}</span>
+      {value.needs_review && <span className="field-review">Needs review</span>}
     </div>
   );
 }
-function AnswerView({
-  answer,
-  question,
+function Distribution({
+  title,
+  decision,
 }: {
-  answer: Answer;
-  question: Question;
+  title: string;
+  decision: Decision;
 }) {
-  if (question.type === "Noul") {
-    const probability = answer.noul ?? 0;
-    return (
-      <div className="answer">
-        <div className="answer-head">
-          <span>{question.instructions.split("?")[0]}?</span>
-          <strong>{percent(probability)} true</strong>
-        </div>
-        <div
-          className="binary-meter"
-          aria-label={`True ${percent(probability)}, false ${percent(1 - probability)}`}
-        >
-          <span style={{ width: `${probability * 100}%` }} />
-        </div>
-        <div className="meter-labels">
-          <span>True {percent(probability)}</span>
-          <span>False {percent(1 - probability)}</span>
-        </div>
-        <p className="explanation">
-          Noul returns a probability from 0 to 1. It has no separate confidence
-          field.
-        </p>
-      </div>
-    );
-  }
-  const values: [string, number][] =
-    question.type === "Score"
-      ? (question.criteria as string[]).map((name, index) => [
-          `${index} · ${name}`,
-          Number(
-            Array.isArray(answer.probabilities)
-              ? (answer.probabilities[index] ?? 0)
-              : (answer.probabilities?.[String(index)] ?? 0),
-          ),
-        ])
-      : Object.entries(answer.probabilities ?? {});
   return (
-    <div className="answer">
-      <div className="answer-head">
-        <span>
-          {question.type === "Choice" ? "Suggested team" : "Impact score"}
-        </span>
-        <strong>
-          {question.type === "Choice"
-            ? label(answer.choice ?? "")
-            : `${answer.score?.toFixed(2)} / 2`}
-        </strong>
-      </div>
-      <Bars values={values} />
-      <div className="confidence">
-        Confidence <strong>{percent(answer.confidence ?? 0)}</strong>
-      </div>
-      <p className="explanation">
-        {question.type === "Score"
-          ? "The score is a weighted average of rubric positions, not a percentage."
-          : "Confidence describes this distribution, not a measured chance of being correct."}
-      </p>
-    </div>
+    <section className="distribution">
+      <h3>{title}</h3>
+      {Object.entries(decision.probabilities)
+        .sort((a, b) => b[1] - a[1])
+        .map(([name, probability]) => (
+          <div className="distribution-row" key={name}>
+            <div>
+              <span>{label(name)}</span>
+              <span>{percent(probability)}</span>
+            </div>
+            <div className="bar">
+              <span style={{ width: `${probability * 100}%` }} />
+            </div>
+          </div>
+        ))}
+    </section>
   );
 }
 export function App() {
-  const refreshVersion = useRef(0);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [config, setConfig] = useState<Config | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [mode, setMode] = useState<Mode>("combined");
-  const [exploring, setExploring] = useState(false);
-  const [queue, setQueue] = useState("all");
-  const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [compose, setCompose] = useState(false);
-  const [resetting, setResetting] = useState(false);
-  const [correcting, setCorrecting] = useState(false);
-  const selected = tickets.find((ticket) => ticket.id === selectedId);
-  const visible = tickets.filter(
-    (ticket) => queue === "all" || queueOf(ticket) === queue,
-  );
-  const run = selected?.runs.find((item) => item.mode === mode);
-  const active =
-    selected?.runs.some((item) => item.status === "running") ?? false;
-  async function refresh() {
-    const version = ++refreshVersion.current;
-    const next = await api<Ticket[]>("/tickets");
-    if (version === refreshVersion.current) setTickets(next);
-    return next;
-  }
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const [selected, setSelected] = useState<string | null>(null);
+  const [filter, setFilter] = useState("all");
+  const version = useRef(0);
   async function load() {
     setLoading(true);
     setError("");
     try {
-      const [settings, next] = await Promise.all([
+      const [settings, queue] = await Promise.all([
         api<Config>("/config"),
         api<Ticket[]>("/tickets"),
       ]);
       setConfig(settings);
-      setTickets(next);
-      setSelectedId(next[0]?.id ?? null);
+      setTickets(queue);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -269,89 +172,40 @@ export function App() {
     void load();
   }, []);
   useEffect(() => {
-    if (
-      busy ||
-      !tickets.some((ticket) =>
-        ticket.runs.some((item) => item.status === "running"),
-      )
-    )
-      return;
+    if (busy || !tickets.some((ticket) => ticket.status === "running")) return;
+    const generation = ++version.current;
     const timer = window.setInterval(() => {
-      void refresh().catch((e) => setError(e.message));
+      void api<Ticket[]>("/tickets")
+        .then((next) => {
+          if (generation === version.current) setTickets(next);
+        })
+        .catch((e) => {
+          if (generation === version.current) setError(e.message);
+        });
     }, 2000);
     return () => {
       window.clearInterval(timer);
-      refreshVersion.current++;
+      version.current++;
     };
   }, [tickets, busy]);
-  function choose(ticket: Ticket) {
-    setSelectedId(ticket.id);
-    setCompose(false);
-    setCorrecting(false);
-    setError("");
-    setNotice("");
-  }
-  function filter(nextQueue: string) {
-    setQueue(nextQueue);
-    setCompose(false);
-    setCorrecting(false);
-    const next = tickets.filter(
-      (ticket) => nextQueue === "all" || queueOf(ticket) === nextQueue,
-    );
-    if (!next.some((ticket) => ticket.id === selectedId))
-      setSelectedId(next[0]?.id ?? null);
-  }
-  async function classify() {
-    if (!selected) return;
-    refreshVersion.current++;
-    setBusy(true);
-    setError("");
-    setNotice("");
-    try {
-      const updated = await api<Ticket>(
-        `/tickets/${selected.id}/runs`,
-        "POST",
-        { mode },
-      );
-      setTickets((current) =>
-        current.map((ticket) => (ticket.id === updated.id ? updated : ticket)),
-      );
-      if (mode === "combined") {
-        setQueue("all");
-        setNotice(
-          updated.correction
-            ? "Result saved. Your manual correction still applies."
-            : `Result saved. Ticket moved to ${label(queueOf(updated))}.`,
-        );
-      }
-    } catch (e) {
-      setError((e as Error).message);
-      await refresh().catch(() => {});
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function create(event: React.FormEvent<HTMLFormElement>) {
+  async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    refreshVersion.current++;
+    version.current++;
     setBusy(true);
     setError("");
+    setNotice("");
     try {
-      const ticket = await api<Ticket>(
-        "/tickets",
-        "POST",
-        Object.fromEntries(form),
-      );
+      const ticket = await api<Ticket>("/tickets", "POST", { subject, body });
       setTickets((current) => [ticket, ...current]);
-      setQueue("all");
-      setMode("combined");
-      setExploring(false);
-      choose(ticket);
+      setCompose(false);
+      setSubject("");
+      setBody("");
+      setSelected(ticket.id);
+      setFilter("all");
       setNotice(
-        ticket.runs[0]?.status === "failed"
-          ? "Ticket saved. Automatic classification failed; you can retry below."
-          : `Ticket created and classified. ${label(queueOf(ticket))}.`,
+        ticket.status === "failed"
+          ? "Ticket saved. Classification failed; retry below."
+          : "Ticket created and classified.",
       );
     } catch (e) {
       setError((e as Error).message);
@@ -359,103 +213,52 @@ export function App() {
       setBusy(false);
     }
   }
-  async function correct(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!selected) return;
-    const data = Object.fromEntries(new FormData(event.currentTarget));
-    refreshVersion.current++;
+  async function retry(ticket: Ticket) {
+    version.current++;
     setBusy(true);
     setError("");
+    setNotice("");
     try {
       const updated = await api<Ticket>(
-        `/tickets/${selected.id}/correction`,
-        "PATCH",
-        data,
+        `/tickets/${ticket.id}/runs`,
+        "POST",
+        {},
       );
       setTickets((current) =>
-        current.map((ticket) => (ticket.id === updated.id ? updated : ticket)),
+        current.map((item) => (item.id === ticket.id ? updated : item)),
       );
-      setCorrecting(false);
-      setQueue("all");
-      setNotice(
-        "Manual correction saved. The original model result is preserved.",
-      );
+      setNotice("Classification updated.");
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setBusy(false);
     }
   }
-  async function reset() {
-    refreshVersion.current++;
-    setBusy(true);
-    setError("");
-    try {
-      const next = await api<Ticket[]>("/reset", "POST", {});
-      setTickets(next);
-      setSelectedId(next[0]?.id ?? null);
-      setQueue("all");
-      setMode("combined");
-      setCompose(false);
-      setCorrecting(false);
-      setResetting(false);
-      setNotice("Demo reset to four unclassified sample tickets.");
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  const route = selected ? effective(selected) : null;
+  const reviewCount = tickets.filter(
+    (ticket) => ticket.classification?.review_required,
+  ).length;
+  const visible = tickets.filter(
+    (ticket) => filter === "all" || ticket.classification?.review_required,
+  );
   return (
-    <div className="app-shell">
-      <header className="topbar">
-        <a className="brand" href="/" aria-label="Jev Support Desk home">
-          <span className="brand-mark">
-            <Layers3 size={21} />
+    <div className="app">
+      <header>
+        <a href="/" className="brand">
+          <span className="brand-icon">
+            <Inbox size={20} />
           </span>
-          <span>
-            Support Desk <span className="brand-by">with Jev</span>
-          </span>
+          Support Desk
         </a>
-        <span className="environment">
-          <span className="status-dot" />
-          Local demo
-        </span>
-        <button
-          className="quiet reset-trigger"
-          disabled={busy}
-          onClick={() => setResetting(!resetting)}
-        >
-          <RotateCcw size={15} />
-          Reset demo
-        </button>
+        <span className="powered">Powered by Jev</span>
       </header>
-      {resetting && (
-        <div className="reset-banner">
-          <p>
-            Delete this demo’s tickets and results, and restore the four
-            samples?
-          </p>
-          <button disabled={busy} onClick={reset}>
-            Reset tickets
-          </button>
-          <button className="quiet" onClick={() => setResetting(false)}>
-            Cancel
-          </button>
-        </div>
-      )}
-      <main className="workspace">
-        <aside className="sidebar">
-          <div className="workspace-name">
-            <span className="workspace-avatar">S</span>
-            <div>
-              <strong>Support workspace</strong>
-              <span>Jev playground</span>
-            </div>
+      <main>
+        <div className="page-heading">
+          <div>
+            <h1>Ticket queue</h1>
+            <p>Every request finds the right department.</p>
           </div>
           <button
-            className="new-ticket"
+            className="primary"
             disabled={busy || loading}
             onClick={() => {
               setCompose(true);
@@ -466,496 +269,272 @@ export function App() {
             <Plus size={17} />
             New ticket
           </button>
-          <nav aria-label="Ticket queues">
-            <h2>Inbox</h2>
-            {["all", "unclassified", "needs_review"].map((item) => (
-              <button
-                key={item}
-                className={`nav-item ${queue === item ? "selected" : ""}`}
-                aria-current={queue === item ? "page" : undefined}
-                disabled={busy}
-                onClick={() => filter(item)}
-              >
-                <Inbox size={16} />
-                <span>{label(item)}</span>
-                <span className="count">
-                  {
-                    tickets.filter(
-                      (ticket) => item === "all" || queueOf(ticket) === item,
-                    ).length
-                  }
-                </span>
-              </button>
-            ))}
-            <h2>Teams</h2>
-            {["billing", "technical", "account", "other"].map((item) => (
-              <button
-                key={item}
-                className={`nav-item ${queue === item ? "selected" : ""}`}
-                disabled={busy}
-                onClick={() => filter(item)}
-              >
-                <span className={`team-dot ${item}`} />
-                <span>{label(item)}</span>
-                <span className="count">
-                  {tickets.filter((ticket) => queueOf(ticket) === item).length}
-                </span>
-              </button>
-            ))}
-          </nav>
-          <div className="sidebar-note">
-            <ShieldCheck size={19} />
-            <p>
-              Decisions you can inspect.
-              <br />
-              Routing you control.
-            </p>
-            <span>Synthetic tickets. Real Jev requests.</span>
+        </div>
+        {error && (
+          <div className="alert error" role="alert">
+            {error}
+            {!config && (
+              <button onClick={() => void load()}>Retry connection</button>
+            )}
           </div>
-        </aside>
-        <section className="desk">
-          <div className="desk-heading">
-            <div>
-              <h1>Your support inbox</h1>
-              <p>Turn a customer message into a decision.</p>
+        )}
+        {notice && (
+          <div className="alert success" role="status">
+            <Check size={16} />
+            {notice}
+          </div>
+        )}
+        {config && !config.configured && (
+          <div className="alert warning">
+            Add TYPESAFE_API_KEY to the demo’s .env file and restart the
+            backend. Tickets will still be saved if classification fails.
+          </div>
+        )}
+        {compose && (
+          <form className="composer" onSubmit={create}>
+            <div className="composer-heading">
+              <h2>New ticket</h2>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="Cancel new ticket"
+                disabled={busy}
+                onClick={() => setCompose(false)}
+              >
+                <X size={19} />
+              </button>
             </div>
-            <span className="model-name">{config?.model ?? "Jev"}</span>
-          </div>
-          <div className="mode-toolbar">
-            <span>New tickets are classified automatically</span>
+            <p>
+              Jev will classify the department and priority when you create it.
+            </p>
+            <label className="example-label">
+              Try an example
+              <select
+                defaultValue=""
+                disabled={busy}
+                onChange={(event) => {
+                  const example = examples[Number(event.target.value)];
+                  if (example) {
+                    setSubject(example.subject);
+                    setBody(example.body);
+                  }
+                }}
+              >
+                <option value="" disabled>
+                  Choose a sample request
+                </option>
+                {examples.map((example, index) => (
+                  <option value={index} key={example.name}>
+                    {example.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Subject
+              <input
+                autoFocus
+                required
+                maxLength={160}
+                value={subject}
+                disabled={busy}
+                onChange={(event) => setSubject(event.target.value)}
+                placeholder="What do you need help with?"
+              />
+            </label>
+            <label>
+              Message
+              <textarea
+                required
+                maxLength={8000}
+                rows={4}
+                disabled={busy}
+                value={body}
+                onChange={(event) => setBody(event.target.value)}
+                placeholder="Describe the issue, its impact, and any deadline."
+              />
+            </label>
+            <div className="form-footer">
+              <span>Two classifications. One Jev request.</span>
+              <button className="primary" disabled={busy}>
+                {busy ? (
+                  <LoaderCircle size={16} className="spinner" />
+                ) : (
+                  <ArrowRight size={16} />
+                )}{" "}
+                {busy ? "Creating and classifying…" : "Create ticket"}
+              </button>
+            </div>
+          </form>
+        )}
+        <div className="queue-toolbar">
+          <div className="filters" role="group" aria-label="Ticket filter">
             <button
-              className="quiet"
-              disabled={busy}
-              aria-pressed={exploring}
-              onClick={() => {
-                setExploring(!exploring);
-                setMode("combined");
-              }}
+              aria-pressed={filter === "all"}
+              onClick={() => setFilter("all")}
             >
-              {exploring ? "Back to inbox" : "Explore question types"}
+              All tickets <span>{tickets.length}</span>
+            </button>
+            <button
+              aria-pressed={filter === "review"}
+              onClick={() => setFilter("review")}
+            >
+              Needs review <span>{reviewCount}</span>
             </button>
           </div>
-          {exploring && (
-            <div className="mode-toolbar">
-              <span id="mode-label">Demo mode</span>
-              <div
-                className="mode-switch"
-                role="group"
-                aria-labelledby="mode-label"
-              >
-                {MODES.map((item) => (
-                  <button
-                    key={item}
-                    disabled={busy}
-                    aria-pressed={mode === item}
-                    className={mode === item ? "active" : ""}
-                    onClick={() => {
-                      setMode(item);
-                      setError("");
-                      setNotice("");
-                    }}
-                  >
-                    {item === "combined" && <Layers3 size={14} />} {label(item)}
-                  </button>
-                ))}
-              </div>
-              <span className="mode-hint">
-                {mode === "combined" ? "Apply routing" : "Preview a decision"}
-              </span>
+          <span className="threshold">
+            Below {percent(config?.review_threshold ?? 0.8)} goes to review
+          </span>
+        </div>
+        <section className="queue" aria-label="Ticket queue">
+          {loading ? (
+            <div className="empty">Loading tickets…</div>
+          ) : visible.length === 0 ? (
+            <div className="empty">
+              <Inbox size={28} />
+              <h2>
+                {filter === "review"
+                  ? "Nothing needs review"
+                  : "Your queue is ready"}
+              </h2>
+              <p>
+                {filter === "review"
+                  ? "Tickets with an uncertain department or priority will appear here."
+                  : "Create a ticket to see its department, priority, and probabilities."}
+              </p>
             </div>
-          )}
-          {error && (
-            <div className="message error" role="alert">
-              {error}
-              {!config && (
-                <button className="quiet" onClick={() => void load()}>
-                  Retry connection
-                </button>
-              )}
-            </div>
-          )}
-          {notice && (
-            <div className="message success" role="status">
-              <Check size={16} />
-              {notice}
-            </div>
-          )}
-          {config && !config.configured && (
-            <div className="message warning">
-              Add TYPESAFE_API_KEY to the demo’s .env file and restart the
-              backend to run live classifications.
-            </div>
-          )}
-          <div className="inbox-layout">
-            <section className="ticket-list" aria-label="Tickets">
-              <div className="list-heading">
-                <h2>{label(queue)}</h2>
-                <span>{visible.length}</span>
-              </div>
-              {loading ? (
-                <p className="list-empty">Loading your inbox…</p>
-              ) : visible.length === 0 ? (
-                <p className="list-empty">No tickets in this queue yet.</p>
-              ) : (
-                visible.map((ticket) => (
-                  <button
-                    disabled={busy}
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Request</th>
+                  <th scope="col">Department</th>
+                  <th scope="col">Priority</th>
+                  <th scope="col">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((ticket) => (
+                  <TicketRows
                     key={ticket.id}
-                    className={`ticket-row ${selectedId === ticket.id && !compose ? "current" : ""}`}
-                    aria-pressed={selectedId === ticket.id && !compose}
-                    onClick={() => choose(ticket)}
-                  >
-                    <div className="ticket-meta">
-                      <span>{ticket.customer}</span>
-                      <span>{ticket.preset ?? "Custom"}</span>
-                    </div>
-                    <h3>{ticket.subject}</h3>
-                    <p>{ticket.body}</p>
-                    <div className="ticket-tags">
-                      <span className={`ticket-status ${queueOf(ticket)}`}>
-                        {label(queueOf(ticket))}
-                      </span>
-                      {effective(ticket)?.priority === "urgent" && (
-                        <span className="urgent-label">Urgent</span>
-                      )}
-                      {ticket.correction && <span>Reviewed</span>}
-                    </div>
-                  </button>
-                ))
-              )}
-              <div className="preset-note">
-                Select a sample to try a refund, an outage, an unclear request,
-                or account access.
-              </div>
-            </section>
-            <section className="detail" aria-label="Ticket detail">
-              {compose ? (
-                <form className="compose" onSubmit={create}>
-                  <div className="section-heading">
-                    <h2>Create a ticket</h2>
-                    <button
-                      type="button"
-                      className="icon-button"
-                      aria-label="Cancel new ticket"
-                      onClick={() => setCompose(false)}
-                    >
-                      <X size={19} />
-                    </button>
-                  </div>
-                  <p>
-                    Write a customer message. Jev will assign its team and
-                    priority when you create it.
-                  </p>
-                  <label>
-                    Customer name
-                    <input
-                      name="customer"
-                      required
-                      maxLength={80}
-                      defaultValue="Demo customer"
-                    />
-                  </label>
-                  <label>
-                    Subject
-                    <input
-                      name="subject"
-                      required
-                      maxLength={160}
-                      placeholder="What does the customer need?"
-                      autoFocus
-                    />
-                  </label>
-                  <label>
-                    Message
-                    <textarea
-                      name="body"
-                      required
-                      maxLength={8000}
-                      rows={7}
-                      placeholder="Include how the problem affects their work."
-                    />
-                  </label>
-                  <button className="primary" disabled={busy}>
-                    {busy ? "Creating and classifying…" : "Create ticket"}
-                    <ArrowRight size={16} />
-                  </button>
-                </form>
-              ) : selected ? (
-                <>
-                  <div className="ticket-content">
-                    <div className="detail-meta">
-                      <span>
-                        <Mail size={15} />
-                        {selected.customer}
-                      </span>
-                      <span>
-                        {selected.preset
-                          ? `${selected.preset} sample`
-                          : "Custom ticket"}
-                      </span>
-                    </div>
-                    <h2>{selected.subject}</h2>
-                    <p className="ticket-body">{selected.body}</p>
-                    {route && (
-                      <div className="saved-routing">
-                        <span>
-                          {selected.correction
-                            ? "Manual decision"
-                            : "Saved routing"}
-                        </span>
-                        <strong>
-                          {label(route.team)} · {label(route.priority)}
-                        </strong>
-                        <button
-                          className="quiet"
-                          disabled={busy}
-                          onClick={() => setCorrecting(!correcting)}
-                        >
-                          <SlidersHorizontal size={14} />
-                          Correct
-                        </button>
-                      </div>
-                    )}
-                    {correcting && (
-                      <form className="correction-form" onSubmit={correct}>
-                        <label>
-                          Team
-                          <select name="team" defaultValue={route?.team}>
-                            {["billing", "technical", "account", "other"].map(
-                              (item) => (
-                                <option key={item} value={item}>
-                                  {label(item)}
-                                </option>
-                              ),
-                            )}
-                          </select>
-                        </label>
-                        <label>
-                          Priority
-                          <select
-                            name="priority"
-                            defaultValue={route?.priority}
-                          >
-                            {["standard", "urgent", "needs_review"].map(
-                              (item) => (
-                                <option key={item} value={item}>
-                                  {label(item)}
-                                </option>
-                              ),
-                            )}
-                          </select>
-                        </label>
-                        <button disabled={busy}>Save correction</button>
-                      </form>
-                    )}
-                  </div>
-                  <div className="decision-panel">
-                    {exploring && (
-                      <>
-                        <div className="decision-heading">
-                          <span className="type-label">{label(mode)}</span>
-                          <span>
-                            {mode === "combined"
-                              ? "4 questions · 1 request"
-                              : "1 question · 1 request"}
-                          </span>
-                        </div>
-                        <h3>{modeCopy[mode].title}</h3>
-                        <p className="decision-description">
-                          {modeCopy[mode].description}
-                        </p>
-                        {mode === "combined" && (
-                          <div className="question-list">
-                            <span>
-                              <b>Choice</b> Team
-                            </span>
-                            <span>
-                              <b>Noul</b> Refund requested
-                            </span>
-                            <span>
-                              <b>Score</b> Impact
-                            </span>
-                            <span>
-                              <b>Noul</b> Impact stated
-                            </span>
-                          </div>
-                        )}
-                        <details className="question-details">
-                          <summary>
-                            Inspect the question{mode === "combined" ? "s" : ""}
-                            <ChevronDown size={14} />
-                          </summary>
-                          {config &&
-                            Object.entries(config.modes[mode].questions).map(
-                              ([key, question]) => (
-                                <div key={key}>
-                                  <strong>
-                                    {key} · {question.type}
-                                  </strong>
-                                  <p>{question.instructions}</p>
-                                  {question.criteria && (
-                                    <ul>
-                                      {Object.entries(question.criteria).map(
-                                        ([name, description]) => (
-                                          <li key={name}>
-                                            <b>{label(name)}</b>: {description}
-                                          </li>
-                                        ),
-                                      )}
-                                    </ul>
-                                  )}
-                                </div>
-                              ),
-                            )}
-                        </details>
-                      </>
-                    )}
-                    {(exploring || !run?.result) && (
-                      <div className="run-row">
-                        <button
-                          className="primary"
-                          disabled={busy || active || !config?.configured}
-                          onClick={() => void classify()}
-                        >
-                          {busy || active ? (
-                            <LoaderCircle size={17} className="spinner" />
-                          ) : (
-                            <Sparkles size={17} />
-                          )}{" "}
-                          {busy || active
-                            ? "Classifying…"
-                            : exploring
-                              ? "Run classification"
-                              : run?.status === "failed"
-                                ? "Retry classification"
-                                : "Classify sample"}
-                          {!busy && !active && <ArrowRight size={16} />}
-                        </button>
-                        <span>
-                          {mode === "combined"
-                            ? "Saves the routing decision"
-                            : "Leaves the ticket’s queue unchanged"}
-                        </span>
-                      </div>
-                    )}
-                    <div
-                      className="results"
-                      aria-live="polite"
-                      aria-busy={busy || active}
-                    >
-                      {busy || active ? (
-                        <p className="result-placeholder">
-                          Asking Jev. Your ticket is saved.
-                        </p>
-                      ) : run?.status === "failed" ? (
-                        <div className="result-error">
-                          <strong>Classification did not complete</strong>
-                          <p>{run.error}</p>
-                        </div>
-                      ) : run?.result && config ? (
-                        <>
-                          <div className="result-heading">
-                            <strong>Classified by Jev</strong>
-                            <span>{run.result.elapsed_ms.toFixed(0)} ms</span>
-                          </div>
-                          {exploring &&
-                            Object.entries(config.modes[mode].questions).map(
-                              ([key, question]) => (
-                                <AnswerView
-                                  key={run.id + key}
-                                  question={question}
-                                  answer={run.result!.raw.answers[key]}
-                                />
-                              ),
-                            )}
-                          {run.result.policy && (
-                            <div
-                              className={`policy ${run.result.policy.review_required ? "review" : ""}`}
-                            >
-                              <strong>
-                                {run.result.policy.review_required
-                                  ? "Send to human review"
-                                  : `Route to ${label(run.result.policy.team)}`}
-                              </strong>
-                              <p>
-                                {label(run.result.policy.priority)} priority ·
-                                Refund{" "}
-                                {run.result.policy.refund?.replaceAll("_", " ")}
-                              </p>
-                              {run.result.policy.reasons?.map((reason) => (
-                                <p key={reason}>{reason}</p>
-                              ))}
-                              <span>
-                                Python applies these rules. A refund flag never
-                                approves a payment.
-                              </span>
-                            </div>
-                          )}
-                        </>
-                      ) : (
-                        <div className="result-placeholder">
-                          <span className="empty-result-icon">
-                            <Layers3 size={22} />
-                          </span>
-                          <strong>Your decision will appear here</strong>
-                          <p>
-                            {exploring
-                              ? `Run ${label(mode)} to see the actual model response.`
-                              : "This sample is ready to classify. New tickets are classified automatically."}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                    {exploring && (
-                      <div className="developer-details">
-                        <details>
-                          <summary>
-                            <Code2 size={16} />
-                            Python code
-                            <ChevronDown size={14} />
-                          </summary>
-                          <p>
-                            This runnable example uses the same question
-                            definitions as the app. Replace its sample ticket to
-                            try your own.
-                          </p>
-                          <pre>
-                            <code>{config?.modes[mode].python}</code>
-                          </pre>
-                        </details>
-                        <details>
-                          <summary>
-                            <Layers3 size={16} />
-                            Raw response
-                            <ChevronDown size={14} />
-                          </summary>
-                          <pre>
-                            {run?.result
-                              ? JSON.stringify(run.result.raw, null, 2)
-                              : "Run classification to see a response."}
-                          </pre>
-                        </details>
-                      </div>
-                    )}
-                  </div>
-                </>
-              ) : (
-                <div className="empty-detail">
-                  <Inbox size={32} />
-                  <h2>
-                    {loading ? "Opening the inbox" : "Nothing waiting here"}
-                  </h2>
-                  <p>
-                    {loading
-                      ? "Loading sample tickets and demo modes."
-                      : "Choose another queue or create a ticket to explore Jev."}
-                  </p>
-                </div>
-              )}
-            </section>
-          </div>
+                    ticket={ticket}
+                    expanded={selected === ticket.id}
+                    busy={busy}
+                    onSelect={() =>
+                      setSelected(selected === ticket.id ? null : ticket.id)
+                    }
+                    onRetry={() => void retry(ticket)}
+                  />
+                ))}
+              </tbody>
+            </table>
+          )}
         </section>
+        <p className="footnote">
+          Probabilities are the model’s estimates, not measured accuracy. The
+          80% review threshold is a demo starting point.
+        </p>
       </main>
     </div>
+  );
+}
+function TicketRows({
+  ticket,
+  expanded,
+  busy,
+  onSelect,
+  onRetry,
+}: {
+  ticket: Ticket;
+  expanded: boolean;
+  busy: boolean;
+  onSelect: () => void;
+  onRetry: () => void;
+}) {
+  const result = ticket.classification;
+  const state =
+    ticket.status === "running"
+      ? "Classifying"
+      : ticket.status === "failed"
+        ? "Failed"
+        : !result
+          ? "Not classified"
+          : result.review_required
+            ? "Needs review"
+            : "Classified";
+  return (
+    <>
+      <tr className={expanded ? "selected" : ""}>
+        <td data-label="Request">
+          <button
+            className="ticket-title"
+            aria-expanded={expanded}
+            onClick={onSelect}
+          >
+            {ticket.subject}
+            <ChevronDown size={16} />
+          </button>
+        </td>
+        <td data-label="Department">
+          <Field value={result?.department} />
+        </td>
+        <td data-label="Priority">
+          <Field value={result?.priority} priority />
+        </td>
+        <td data-label="Status">
+          <span
+            className={`status ${state === "Needs review" ? "review" : ticket.status}`}
+          >
+            {state}
+          </span>
+        </td>
+      </tr>
+      {expanded && (
+        <tr className="detail-row">
+          <td colSpan={4}>
+            <div className="ticket-detail">
+              <div className="message-copy">
+                <h2>{ticket.subject}</h2>
+                <p>{ticket.body}</p>
+                {ticket.error && (
+                  <div className="alert error" role="alert">
+                    {ticket.error}
+                  </div>
+                )}
+                {!result && ticket.status !== "running" && (
+                  <button disabled={busy} onClick={onRetry}>
+                    {busy
+                      ? "Classifying…"
+                      : ticket.status === "failed"
+                        ? "Retry classification"
+                        : "Classify ticket"}
+                  </button>
+                )}
+                {ticket.status === "running" && (
+                  <p className="muted">Classification is in progress.</p>
+                )}
+                {ticket.elapsed_ms !== null && (
+                  <span className="timing">
+                    Classified by Jev · {ticket.elapsed_ms.toFixed(0)} ms
+                  </span>
+                )}
+              </div>
+              {result && (
+                <div className="probabilities">
+                  <Distribution
+                    title="Department probabilities"
+                    decision={result.department}
+                  />
+                  <Distribution
+                    title="Priority probabilities"
+                    decision={result.priority}
+                  />
+                </div>
+              )}
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }

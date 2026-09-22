@@ -1,38 +1,26 @@
-# Support desk demo
+# Internal ticket queue
 
-## 1. Outcome and scope
+## Outcome
 
-Build the agreed three-panel support inbox for screen recording, separate from the tutorial modules. React presents the same saved ticket through Choice, Noul, Score, and Combined. FastAPI calls Jev and SQLite persists tickets and runs. This folder has its own dependencies and can be copied out of this repository. It imports nothing from the tutorial package.
+The presenter creates a ticket and sees its Department and Priority, each with its category probability. A single table replaces the previous multi-panel teaching interface. Clicking a request reveals its message and both distributions. The original tutorial examples stay separate.
 
-## 2. Behaviour and decisions
+## Decisions
 
-Creating a ticket automatically makes one Combined request before returning the saved ticket, including any classification error. The default inbox shows a compact result. Explore question types reveals the optional selector, probability details, and Python/raw panels. Presets remain unclassified until explicitly run, so startup and reset do not spend credits. Changing mode never calls the API. Single types are previews; Combined asks all questions in one request and applies Python routing policy. Missing impact or uncertainty sends the ticket to Needs review. A refund flag describes intent, never authorises payment. Human corrections remain separate from model output and survive later runs.
+Department is Choice: HR, Finance, Engineering, IT Support, Other. Engineering owns the company's product; IT Support owns employee tools and access. Priority is Choice: Low, Normal, High, Critical. Both questions run in one request. The highest category probability determines the label. Below 80% flags that field and the whole ticket for review; exactly 80% passes. Other is not automatically uncertain. This uses probabilities, not the separate SDK confidence statistic.
 
-The existing warm white, ink, and green visual system carries into the agreed queue/list/detail composition. A horizontal segmented mode control and visible question make the teaching sequence clear. Results use labelled bars, a binary meter, and an ordered impact rubric. Code and raw response are expandable. Mobile stacks the panels. No comp selection is needed because the user has approved this composition and asked to build it.
+Create saves the ticket first, then calls Jev. Failures return the saved ticket and an actionable retry. There is no type explorer, refund flag, impact score, code panel, correction form, or reset UI. Examples fill the create form; they do not make API calls. New databases start empty. Old tickets remain, but legacy classifications are excluded from the current UI until explicitly reclassified. Historical responses stay stored.
 
-## 3. Data and lifecycle
+## Acceptance criteria
 
-Tickets have UUIDs, immutable subject/body, creation time, optional routing and manual correction. Runs have UUIDs, ticket ID, mode, running/succeeded/failed state, timestamp, exact response and elapsed time. Each ticket permits one live request across modes, claimed atomically in SQLite. A 90-second lease recovers abandoned runs; the SDK has a 30-second timeout without automatic retry. Late results cannot overwrite a newer claim. Reset removes only this demo's data and restores synthetic presets, following explicit UI confirmation; it refuses while runs are active.
+- AC-1: Creating a ticket makes one request containing exactly two Choice questions; the result is saved and displayed without a second click.
+- AC-2: Queue rows show selected Department and Priority with their category probabilities. Opening a row shows original text and complete distributions.
+- AC-3: A category probability below .8 flags its field and the ticket. The Needs review filter includes either uncertain field. Exactly .8 and a confident Other do not trigger review.
+- AC-4: Failure preserves the ticket, displays the error, and allows retry. Active and expired claims cannot overwrite newer results.
+- AC-5: Existing messages survive the taxonomy change. Old labels are not presented as new classifications. Startup and reads do not spend API calls.
+- AC-6: The single queue and inline form work on desktop, mobile, and keyboard with clear loading and empty states.
+- INV-1: Credentials remain server-side. Ticket text is rendered as text, never HTML.
+- INV-2: The numeric threshold compares unrounded probabilities; displayed probabilities are not confidence scores or accuracy claims.
 
-## 4. Local boundary
+## Checks and limits
 
-Bind to loopback. Keep the API key in the backend environment; never put it in frontend code. API mutations require JSON and a custom request header, with no cross-origin allowance. Trusted-host validation rejects unknown hosts. Ticket content is plain text. Provider errors are reduced to safe actionable messages. This local demo has no account system or hosted deployment support.
-
-## 5. Acceptance criteria and invariants
-
-- AC-1: Creating a ticket automatically makes exactly one Combined request; failures preserve the created ticket. The optional four-mode explorer makes requests only on an explicit run click; each includes exactly the declared questions.
-- AC-2: Choice displays its distribution; Noul displays true/false probability; Score displays its ordered distribution and weighted score. Code is generated from the same question definitions used by the backend.
-- AC-3: Only Combined applies automatic routing, with review on unclear impact or uncertain answers. Saved routing survives restart.
-- AC-4: Create, presets, queue filters, manual corrections, and reset work. Corrections remain distinct from original results.
-- AC-5: Failure preserves the ticket and previous successful runs; retry is possible. Concurrent and stale requests cannot overwrite later decisions.
-- AC-6: Desktop, mobile, keyboard controls, loading, empty, and error states are usable. Real API results are clearly distinguished from empty states.
-- INV-1: API keys never enter browser responses or committed files.
-- INV-2: Preview runs never mutate routing. Human corrections always win over model routing.
-
-## 6. Proof
-
-Focused API tests cover AC-1 through AC-5 and INV-1/2 with deterministic provider responses, including concurrency and expiration. Frontend type checking and production build check contracts. Browser checks cover AC-6 and full create, mode-switch, classify, correction, and reset flows with actual Jev requests where credentials are available. Record limitations in verification.md. Review the complete demo diff independently before delivery.
-
-## 7. Tradeoffs and exclusions
-
-SQLite and synchronous provider calls keep setup small. This is for local recording, not multiple authenticated agents or large queues. No real mailbox, model router, refund execution, generated replies, or changes to the existing tutorial app.
+API tests prove question shape, threshold boundaries, persistence, legacy-data handling, retries, and concurrency. React tests prove probabilities, review filtering, creation, retries, and stale-poll protection. Browser checks exercise actual Jev responses and both viewport sizes. This is a single-user local demo; model classifications and the threshold need evaluation before any production use.

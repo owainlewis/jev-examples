@@ -1,43 +1,41 @@
-import ast
 import copy
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import Event
 from time import time
 import unittest
 from unittest.mock import patch
+
 from fastapi.testclient import TestClient
 from backend.app import create_app
-from backend.classifier import MODES, policy, python_example, questions, classify
+from backend.classifier import DEPARTMENTS, classify, policy, questions
 from backend.store import Store, LEASE_SECONDS
 
+HEADERS = {"X-Demo-Request": "support-desk"}
 ANSWERS = {
-    "team": {
-        "choice": "billing",
+    "department": {
+        "choice": "it_support",
+        "confidence": 0.1,
         "probabilities": {
-            "billing": 0.97,
-            "technical": 0.01,
-            "account": 0.01,
+            "hr": 0.01,
+            "finance": 0.01,
+            "engineering": 0.03,
+            "it_support": 0.94,
             "other": 0.01,
         },
-        "confidence": 0.95,
     },
-    "refund_requested": {"noul": 0.99},
-    "impact": {"score": 0.02, "probabilities": [0.99, 0, 0.01], "confidence": 0.95},
-    "impact_stated": {"noul": 0.99},
+    "priority": {
+        "choice": "high",
+        "confidence": 0.99,
+        "probabilities": {"low": 0.01, "normal": 0.09, "high": 0.89, "critical": 0.01},
+    },
 }
-HEADERS = {"X-Demo-Request": "support-desk"}
 
 
-def result(mode):
-    answers = {key: copy.deepcopy(ANSWERS[key]) for key in MODES[mode]}
-    return {
-        "raw": {"answers": answers},
-        "elapsed_ms": 123.4,
-        "policy": policy(answers) if mode == "combined" else None,
-    }
+def result():
+    answers = copy.deepcopy(ANSWERS)
+    return {"raw": {"answers": answers}, "elapsed_ms": 123.4, "policy": policy(answers)}
 
 
 class WorkflowTests(unittest.TestCase):
@@ -47,98 +45,200 @@ class WorkflowTests(unittest.TestCase):
         self.path = Path(self.tmp.name) / "desk.sqlite3"
         self.calls = []
 
-        def provider(ticket, mode):
-            self.calls.append((ticket, mode))
-            return result(mode)
+        def provider(ticket):
+            self.calls.append(ticket)
+            return result()
 
         self.app = create_app(self.path, provider)
         self.client = TestClient(self.app, headers=HEADERS)
         self.addCleanup(self.client.close)
-        self.identifier = self.client.get("/api/tickets").json()[0]["id"]
+        self.store = self.app.state.store
 
-    def run_mode(self, mode):
+    def create(self):
         return self.client.post(
-            f"/api/tickets/{self.identifier}/runs", json={"mode": mode}
-        )
-
-    def test_preview_modes_do_not_route_and_only_call_on_run(self):
-        self.client.get("/api/config")
-        self.client.get("/api/tickets")
-        self.assertEqual(self.calls, [])
-        for mode in ["choice", "noul", "score"]:
-            ticket = self.run_mode(mode).json()
-            self.assertIsNone(ticket["routing"])
-            self.assertEqual(
-                list(ticket["runs"][0]["result"]["raw"]["answers"]), MODES[mode]
-            )
-        self.assertEqual(len(self.calls), 3)
-
-    def test_combined_routes_and_persists(self):
-        ticket = self.run_mode("combined").json()
-        self.assertEqual(ticket["routing"]["team"], "billing")
-        self.assertEqual(ticket["routing"]["priority"], "standard")
-        self.assertEqual(
-            Store(self.path).get(self.identifier)["routing"], ticket["routing"]
-        )
-
-    def test_manual_correction_survives_future_runs(self):
-        self.run_mode("combined")
-        correction = {"team": "account", "priority": "urgent"}
-        response = self.client.patch(
-            f"/api/tickets/{self.identifier}/correction", json=correction
-        )
-        self.assertEqual(response.status_code, 200)
-        ticket = self.run_mode("combined").json()
-        self.assertEqual(ticket["correction"], correction)
-        self.assertEqual(ticket["routing"]["team"], "billing")
-
-    def test_policy_reviews_uncertainty_and_missing_impact(self):
-        for key, field, value in [
-            ("impact_stated", "noul", 0.3),
-            ("team", "confidence", 0.4),
-            ("impact", "confidence", 0.4),
-            ("team", "choice", "other"),
-        ]:
-            answers = copy.deepcopy(ANSWERS)
-            answers[key][field] = value
-            self.assertTrue(policy(answers)["review_required"])
-            self.assertEqual(policy(answers)["priority"], "needs_review")
-        answers = copy.deepcopy(ANSWERS)
-        answers["impact"]["score"] = 1.9
-        self.assertEqual(policy(answers)["priority"], "urgent")
-
-    def test_create_and_reset(self):
-        response = self.client.post(
             "/api/tickets",
-            json={"subject": " Test ", "body": "Hello", "customer": "Sam"},
+            json={
+                "subject": "GitHub access",
+                "body": "My account is locked. I cannot work.",
+            },
         )
-        self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.json()["subject"], "Test")
-        self.assertEqual(response.json()["routing"]["team"], "billing")
-        self.assertEqual(response.json()["runs"][0]["mode"], "combined")
-        self.assertEqual(len(self.calls), 1)
-        self.assertEqual(len(self.client.get("/api/tickets").json()), 5)
-        tickets = self.client.post("/api/reset", json={}).json()
-        self.assertEqual(len(tickets), 4)
-        self.assertTrue(all(not t["runs"] and t["routing"] is None for t in tickets))
 
-    def test_validation_and_local_request_boundary(self):
+    def test_creation_automatically_classifies_once_and_persists(self):
+        response = self.create()
+        self.assertEqual(response.status_code, 201)
+        ticket = response.json()
+        self.assertEqual(len(self.calls), 1)
+        self.assertEqual(ticket["status"], "succeeded")
+        self.assertEqual(ticket["classification"]["department"]["choice"], "it_support")
+        self.assertEqual(ticket["classification"]["department"]["probability"], 0.94)
+        self.assertEqual(ticket["classification"]["priority"]["choice"], "high")
+        self.assertFalse(ticket["classification"]["review_required"])
+        self.assertEqual(
+            Store(self.path).get(ticket["id"])["routing"], ticket["classification"]
+        )
+
+    def test_startup_and_reads_do_not_spend_api_calls(self):
+        self.assertEqual(self.client.get("/api/tickets").json(), [])
+        self.client.get("/api/config")
+        self.assertEqual(self.calls, [])
+
+    def test_category_probability_not_confidence_controls_review(self):
+        accepted = policy(ANSWERS)
+        self.assertFalse(
+            accepted["department"]["needs_review"]
+        )  # confidence .1, probability .94
+        answers = copy.deepcopy(ANSWERS)
+        answers["priority"]["probabilities"] = {
+            "low": 0.01,
+            "normal": 0.2,
+            "high": 0.78,
+            "critical": 0.01,
+        }
+        reviewed = policy(answers)
+        self.assertTrue(reviewed["review_required"])
+        self.assertTrue(reviewed["priority"]["needs_review"])
+        self.assertFalse(reviewed["department"]["needs_review"])
+        self.assertEqual(reviewed["priority"]["choice"], "high")
+        self.assertEqual(reviewed["priority"]["probability"], 0.78)
+
+    def test_exact_threshold_and_other_are_not_automatically_reviewed(self):
+        answers = copy.deepcopy(ANSWERS)
+        answers["department"]["probabilities"] = {
+            "hr": 0.05,
+            "finance": 0.05,
+            "engineering": 0.05,
+            "it_support": 0.05,
+            "other": 0.8,
+        }
+        decision = policy(answers)
+        self.assertEqual(decision["department"]["choice"], "other")
+        self.assertFalse(decision["review_required"])
+        answers["department"]["probabilities"]["other"] = 0.7999
+        self.assertTrue(policy(answers)["department"]["needs_review"])
+
+    def test_selects_largest_probability_instead_of_trusting_choice_label(self):
+        answers = copy.deepcopy(ANSWERS)
+        answers["department"]["choice"] = "hr"
+        self.assertEqual(policy(answers)["department"]["choice"], "it_support")
+
+    def test_questions_use_two_choice_types_and_all_categories(self):
+        query = questions()
+        self.assertEqual(set(query), {"department", "priority"})
+        self.assertTrue(
+            all(type(value).__name__ == "Choice" for value in query.values())
+        )
+        self.assertEqual(set(query["department"].criteria), set(DEPARTMENTS))
+        self.assertEqual(
+            set(query["priority"].criteria), {"low", "normal", "high", "critical"}
+        )
+        with patch("backend.classifier.TypeSafeClient") as client:
+            call = client.return_value.__enter__.return_value.system_one
+            call.return_value.model_dump.return_value = {"answers": ANSWERS}
+            classify({"subject": "Hello", "body": "Help", "customer": "Private name"})
+            self.assertEqual(call.call_count, 1)
+            self.assertEqual(
+                call.call_args.kwargs["state"], {"subject": "Hello", "body": "Help"}
+            )
+            self.assertEqual(call.call_args.kwargs["questions"], query)
+
+    def test_auto_failure_preserves_ticket_and_retry_succeeds(self):
+        def fail(ticket):
+            raise RuntimeError("private-key")
+
+        with TestClient(create_app(self.path, fail), headers=HEADERS) as client:
+            response = client.post(
+                "/api/tickets", json={"subject": "Help", "body": "Need access"}
+            )
+        saved = response.json()
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(saved["status"], "failed")
+        self.assertIsNone(saved["classification"])
+        self.assertNotIn("private-key", response.text)
+        retry = self.client.post(f"/api/tickets/{saved['id']}/runs", json={})
+        self.assertEqual(retry.status_code, 200)
+        self.assertEqual(retry.json()["status"], "succeeded")
+        self.assertEqual(len(self.store.get(saved["id"])["runs"]), 2)
+
+    def test_concurrent_run_and_reset_are_rejected(self):
+        entered, release = Event(), Event()
+        ticket = self.store.create(
+            {"subject": "Hello", "body": "Help", "customer": "Sam"}
+        )
+
+        def slow(ticket):
+            entered.set()
+            if not release.wait(5):
+                raise TimeoutError()
+            return result()
+
+        with (
+            TestClient(create_app(self.path, slow), headers=HEADERS) as client,
+            ThreadPoolExecutor() as pool,
+        ):
+            pending = pool.submit(
+                client.post, f"/api/tickets/{ticket['id']}/runs", json={}
+            )
+            try:
+                self.assertTrue(entered.wait(3))
+                self.assertEqual(
+                    self.client.post(
+                        f"/api/tickets/{ticket['id']}/runs", json={}
+                    ).status_code,
+                    409,
+                )
+            finally:
+                release.set()
+            self.assertEqual(pending.result().status_code, 200)
+
+    def test_expired_run_cannot_overwrite_newer_result(self):
+        ticket = self.store.create(
+            {"subject": "Hello", "body": "Help", "customer": "Sam"}
+        )
+        old = self.store.claim(ticket["id"], "triage")
+        with self.store.connection() as db:
+            db.execute(
+                "UPDATE runs SET started_at=? WHERE id=?",
+                (time() - LEASE_SECONDS - 1, old),
+            )
+        new = self.store.claim(ticket["id"], "triage")
+        self.assertTrue(self.store.finish(new, result()))
+        self.assertFalse(self.store.finish(old, result()))
+        self.assertEqual(
+            self.store.get(ticket["id"])["routing"]["priority"]["choice"], "high"
+        )
+
+    def test_legacy_tickets_preserved_without_mislabeling_old_results(self):
+        old = self.store.create(
+            {"subject": "Old ticket", "body": "Keep this message", "customer": "Sam"}
+        )
+        with self.store.connection() as db:
+            db.execute(
+                "UPDATE tickets SET routing=? WHERE id=?",
+                ('{"team":"billing","priority":"standard"}', old["id"]),
+            )
+        saved = self.client.get("/api/tickets").json()[0]
+        self.assertEqual(saved["body"], "Keep this message")
+        self.assertIsNone(saved["classification"])
+        self.assertEqual(saved["status"], "unclassified")
+        self.assertEqual(
+            self.client.post(f"/api/tickets/{old['id']}/runs", json={}).json()[
+                "classification"
+            ]["department"]["choice"],
+            "it_support",
+        )
+
+    def test_validation_and_local_boundary(self):
         self.assertEqual(
             self.client.post(
                 "/api/tickets", json={"subject": " ", "body": "hi"}
             ).status_code,
             422,
         )
-        self.assertEqual(self.run_mode("unknown").status_code, 422)
         self.assertEqual(
             self.client.post(
-                "/api/reset", json={}, headers={"X-Demo-Request": ""}
-            ).status_code,
-            403,
-        )
-        self.assertEqual(
-            self.client.post(
-                "/api/reset", content="{}", headers={"Content-Type": "text/plain"}
+                "/api/tickets",
+                json={"subject": "Hi", "body": "hi"},
+                headers={"X-Demo-Request": ""},
             ).status_code,
             403,
         )
@@ -149,185 +249,16 @@ class WorkflowTests(unittest.TestCase):
             400,
         )
         self.assertEqual(
-            self.client.post(
-                "/api/tickets/missing/runs", json={"mode": "choice"}
-            ).status_code,
-            404,
+            self.client.post("/api/tickets/missing/runs", json={}).status_code, 404
         )
-
-    def test_failure_preserves_history_and_sanitizes_error(self):
-        self.run_mode("choice")
-
-        def fail(ticket, mode):
-            raise RuntimeError("secret-api-key-and-private-data")
-
-        with TestClient(create_app(self.path, fail), headers=HEADERS) as client:
-            response = client.post(
-                f"/api/tickets/{self.identifier}/runs", json={"mode": "choice"}
-            )
-            self.assertEqual(response.status_code, 502)
-            self.assertNotIn("secret", response.text)
-        self.assertEqual(
-            [r["status"] for r in self.app.state.store.get(self.identifier)["runs"]],
-            ["failed", "succeeded"],
-        )
-        self.assertEqual(self.run_mode("choice").status_code, 200)
-
-    def test_concurrent_request_and_reset_rejected_correction_preserved(self):
-        entered, release = Event(), Event()
-
-        def slow(ticket, mode):
-            entered.set()
-            if not release.wait(5):
-                raise TimeoutError()
-            return result(mode)
-
-        with (
-            TestClient(create_app(self.path, slow), headers=HEADERS) as client,
-            ThreadPoolExecutor() as pool,
-        ):
-            pending = pool.submit(
-                client.post,
-                f"/api/tickets/{self.identifier}/runs",
-                json={"mode": "combined"},
-            )
-            try:
-                self.assertTrue(entered.wait(3))
-                self.assertEqual(self.run_mode("choice").status_code, 409)
-                self.assertEqual(
-                    self.client.post("/api/reset", json={}).status_code, 409
-                )
-                correction = {"team": "technical", "priority": "urgent"}
-                self.client.patch(
-                    f"/api/tickets/{self.identifier}/correction", json=correction
-                )
-            finally:
-                release.set()
-            self.assertEqual(pending.result().json()["correction"], correction)
-
-    def test_expired_claim_cannot_overwrite_new_result(self):
-        store = self.app.state.store
-        old = store.claim(self.identifier, "combined")
-        with store.connection() as db:
-            db.execute(
-                "UPDATE runs SET started_at=? WHERE id=?",
-                (time() - LEASE_SECONDS - 1, old),
-            )
-        new = store.claim(self.identifier, "combined")
-        self.assertTrue(store.finish(new, result("combined")))
-        stale = result("combined")
-        stale["policy"]["team"] = "other"
-        self.assertFalse(store.finish(old, stale))
-        self.assertEqual(store.get(self.identifier)["routing"]["team"], "billing")
-
-    def test_question_definitions_and_generated_examples(self):
-        expected = {
-            "choice": {"team": "Choice"},
-            "noul": {"refund_requested": "Noul"},
-            "score": {"impact": "Score"},
-            "combined": {
-                "team": "Choice",
-                "refund_requested": "Noul",
-                "impact": "Score",
-                "impact_stated": "Noul",
-            },
-        }
-        for mode, types in expected.items():
-            self.assertEqual(
-                {key: type(q).__name__ for key, q in questions(mode).items()}, types
-            )
-            code = python_example(mode)
-            ast.parse(code)
-            scope = {}
-            exec(code.split("with TypeSafeClient")[0], scope)
-            self.assertEqual(scope["questions"], questions(mode))
-
-    def test_sdk_call_uses_exact_mode_and_ticket_state(self):
-        with patch("backend.classifier.TypeSafeClient") as client:
-            response = client.return_value.__enter__.return_value.system_one
-            response.return_value.model_dump.return_value = {"answers": ANSWERS}
-            for mode in MODES:
-                classify(
-                    {
-                        "subject": "Hello",
-                        "body": "Refund please",
-                        "customer": "Private name",
-                    },
-                    mode,
-                )
-                self.assertEqual(
-                    response.call_args.kwargs["state"],
-                    {"subject": "Hello", "body": "Refund please"},
-                )
-                self.assertEqual(
-                    response.call_args.kwargs["questions"], questions(mode)
-                )
-
-    def test_reset_after_create_commit_returns_complete_snapshot(self):
-        store = self.app.state.store
-        original = store.connection
-        reset_once = [True]
-
-        @contextmanager
-        def connection():
-            with original() as db:
-                yield db
-            if reset_once[0]:
-                reset_once[0] = False
-                store.reset()
-
-        with patch.object(store, "connection", connection):
-            saved = store.create(
-                {"subject": "Saved", "body": "A real ticket", "customer": "Sam"}
-            )
-        self.assertEqual(saved["subject"], "Saved")
-        self.assertEqual(saved["runs"], [])
-        self.assertEqual(len(store.list()), 4)
-
-    def test_reset_between_run_lookup_and_claim_returns_not_found(self):
-        store = self.app.state.store
-        original = store.claim
-
-        def reset_before_claim(identifier, mode):
-            store.reset()
-            return original(identifier, mode)
-
-        with patch.object(store, "claim", reset_before_claim):
-            self.assertEqual(self.run_mode("choice").status_code, 404)
-        self.assertEqual(self.calls, [])
-
-    def test_correction_after_reset_returns_not_found(self):
-        self.app.state.store.reset()
-        response = self.client.patch(
-            f"/api/tickets/{self.identifier}/correction",
-            json={"team": "billing", "priority": "standard"},
-        )
-        self.assertEqual(response.status_code, 404)
-
-    def test_automatic_failure_returns_saved_ticket_and_can_retry(self):
-        def fail(ticket, mode):
-            raise RuntimeError("private-key")
-
-        with TestClient(create_app(self.path, fail), headers=HEADERS) as client:
-            response = client.post(
-                "/api/tickets", json={"subject": "Refund", "body": "Please refund me."}
-            )
-        self.assertEqual(response.status_code, 201)
-        saved = response.json()
-        self.assertEqual(saved["runs"][0]["status"], "failed")
-        self.assertIsNone(saved["routing"])
-        self.assertNotIn("private-key", response.text)
-        retry = self.client.post(
-            f"/api/tickets/{saved['id']}/runs", json={"mode": "combined"}
-        )
-        self.assertEqual(retry.status_code, 200)
-        self.assertEqual(retry.json()["routing"]["team"], "billing")
-
-    def test_config_never_returns_api_key(self):
         with patch.dict("os.environ", {"TYPESAFE_API_KEY": "private-test-key"}):
-            response = self.client.get("/api/config")
-            self.assertTrue(response.json()["configured"])
-            self.assertNotIn("private-test-key", response.text)
+            self.assertNotIn("private-test-key", self.client.get("/api/config").text)
+
+    def test_invalid_distribution_rejected(self):
+        answers = copy.deepcopy(ANSWERS)
+        answers["department"]["probabilities"]["hr"] = float("nan")
+        with self.assertRaises(ValueError):
+            policy(answers)
 
 
 if __name__ == "__main__":

@@ -5,207 +5,201 @@ import {
   fireEvent,
   render,
   screen,
+  within,
 } from "@testing-library/react";
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { App } from "./App";
 
-const ticket = {
-  id: "ticket-1",
-  subject: "A refund",
-  body: "Refund the duplicate payment, please.",
-  customer: "Sam",
-  preset: "Refund",
-  routing: { team: "billing", priority: "standard" },
-  correction: null,
-  runs: [
-    {
-      id: "run-1",
-      mode: "choice",
-      status: "running",
-      result: null,
-      error: null,
+const classification = {
+  department: {
+    choice: "it_support",
+    probability: 0.94,
+    probabilities: {
+      it_support: 0.94,
+      engineering: 0.03,
+      hr: 0.01,
+      finance: 0.01,
+      other: 0.01,
     },
-  ],
+    needs_review: false,
+  },
+  priority: {
+    choice: "high",
+    probability: 0.78,
+    probabilities: { high: 0.78, normal: 0.2, low: 0.01, critical: 0.01 },
+    needs_review: true,
+  },
+  review_required: true,
 };
-const config = {
-  configured: true,
-  model: "test-model",
-  modes: Object.fromEntries(
-    ["choice", "noul", "score", "combined"].map((mode) => [
-      mode,
-      { questions: {}, python: "# Example" },
-    ]),
-  ),
+const ticket = {
+  id: "one",
+  subject: "GitHub is locked",
+  body: "My work account is locked.",
+  created_at: 0,
+  status: "succeeded",
+  classification,
+  error: null,
+  elapsed_ms: 180,
 };
-const response = (data: unknown) =>
-  new Response(JSON.stringify(data), {
-    status: 200,
-    headers: { "Content-Type": "application/json" },
-  });
-let resolvePoll: (value: Response) => void;
-let reads: number;
-
-beforeEach(() => {
-  vi.useFakeTimers();
-  reads = 0;
+const response = (value: unknown) =>
+  new Response(JSON.stringify(value), { status: 200 });
+function mockQueue(queue: unknown[] = [ticket]) {
   vi.stubGlobal(
     "fetch",
     vi.fn((url: string, options: RequestInit) => {
-      if (url === "/api/config") return Promise.resolve(response(config));
-      if (url === "/api/tickets" && options.method === "POST") {
+      if (url === "/api/config")
+        return Promise.resolve(
+          response({
+            configured: true,
+            model: "test-model",
+            review_threshold: 0.8,
+          }),
+        );
+      if (url === "/api/tickets" && options.method === "GET")
+        return Promise.resolve(response(queue));
+      if (url === "/api/tickets" && options.method === "POST")
         return Promise.resolve(
           response({
             ...ticket,
-            ...JSON.parse(options.body as string),
             id: "created",
-            runs: [
-              {
-                id: "auto",
-                mode: "combined",
-                status: "succeeded",
-                error: null,
-                result: {
-                  raw: { answers: {} },
-                  elapsed_ms: 150,
-                  policy: {
-                    team: "billing",
-                    priority: "standard",
-                    refund: "requested",
-                    review_required: false,
-                    reasons: [],
-                  },
-                },
-              },
-            ],
+            ...JSON.parse(options.body as string),
           }),
         );
-      }
-      if (url === "/api/tickets") {
-        reads++;
-        if (reads === 1) return Promise.resolve(response([ticket]));
-        return new Promise<Response>((resolve) => {
-          resolvePoll = resolve;
-        });
-      }
-      if (url.endsWith("/correction"))
-        return Promise.resolve(
-          response({
-            ...ticket,
-            correction: JSON.parse(options.body as string),
-          }),
-        );
-      if (url === "/api/reset")
-        return Promise.resolve(
-          response([
-            {
-              ...ticket,
-              id: "new-ticket",
-              subject: "Fresh sample",
-              routing: null,
-              runs: [],
-            },
-          ]),
-        );
-      throw new Error(`Unexpected request: ${url}`);
+      if (url.endsWith("/runs")) return Promise.resolve(response(ticket));
+      throw new Error(url);
     }),
   );
-});
+}
 afterEach(() => {
   cleanup();
-  vi.useRealTimers();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
-async function openWithPendingPoll() {
+test("queue shows both category probabilities and flags only uncertain field", async () => {
+  mockQueue();
   await act(async () => {
     render(<App />);
   });
-  await act(async () => {
-    vi.advanceTimersByTime(2000);
-  });
-  expect(reads).toBe(2);
-}
+  const row = screen.getByRole("row", { name: /GitHub is locked/ });
+  expect(within(row).getByText("IT Support")).toBeTruthy();
+  expect(within(row).getByText("94.0%")).toBeTruthy();
+  expect(within(row).getByText("High")).toBeTruthy();
+  expect(within(row).getByText("78.0%")).toBeTruthy();
+  expect(within(row).getAllByText("Needs review").length).toBe(2);
+  fireEvent.click(screen.getByRole("button", { name: "GitHub is locked" }));
+  expect(screen.getByText("Department probabilities")).toBeTruthy();
+  expect(screen.getByText("Priority probabilities")).toBeTruthy();
+  expect(screen.getByText("My work account is locked.")).toBeTruthy();
+});
 
-test("switching modes keeps the ticket and makes no mutation request", async () => {
+test("create needs only subject and message and makes one request", async () => {
+  mockQueue([]);
   await act(async () => {
     render(<App />);
   });
-  fireEvent.click(
-    screen.getByRole("button", { name: "Explore question types" }),
-  );
-  for (const mode of ["Noul", "Score", "Combined", "Choice"]) {
-    fireEvent.click(screen.getByRole("button", { name: mode }));
-    expect(
-      screen.getByRole("heading", { name: "A refund", level: 2 }),
-    ).toBeTruthy();
-  }
-  expect(
-    vi
-      .mocked(fetch)
-      .mock.calls.every(([, options]) => options?.method === "GET"),
-  ).toBe(true);
-});
-
-test("a late poll cannot remove a saved human correction", async () => {
-  await openWithPendingPoll();
-  fireEvent.click(screen.getByRole("button", { name: "Correct" }));
-  fireEvent.change(screen.getByLabelText("Team", { exact: true }), {
-    target: { value: "account" },
-  });
-  await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: "Save correction" }));
-  });
-  expect(screen.getByText("Manual decision")).toBeTruthy();
-  await act(async () => {
-    resolvePoll(response([{ ...ticket, runs: [] }]));
-  });
-  expect(screen.getByText("Manual decision")).toBeTruthy();
-  expect(screen.getByText("Account · Standard")).toBeTruthy();
-});
-
-test("a late poll cannot restore tickets removed by reset", async () => {
-  await openWithPendingPoll();
-  fireEvent.click(screen.getByRole("button", { name: "Reset demo" }));
-  await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: "Reset tickets" }));
-  });
-  expect(
-    screen.getByRole("heading", { name: "Fresh sample", level: 2 }),
-  ).toBeTruthy();
-  await act(async () => {
-    resolvePoll(response([{ ...ticket, runs: [] }]));
-  });
-  expect(
-    screen.getByRole("heading", { name: "Fresh sample", level: 2 }),
-  ).toBeTruthy();
-  expect(
-    screen.queryByRole("heading", { name: "A refund", level: 2 }),
-  ).toBeNull();
-});
-
-test("create automatically shows its result with no second classification click", async () => {
-  await act(async () => {
-    render(<App />);
-  });
-  expect(screen.queryByRole("group", { name: "Demo mode" })).toBeNull();
+  expect(screen.getByText("Your queue is ready")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "New ticket" }));
   fireEvent.change(screen.getByRole("textbox", { name: "Subject" }), {
-    target: { value: "New refund" },
+    target: { value: "New request" },
   });
   fireEvent.change(screen.getByRole("textbox", { name: "Message" }), {
-    target: { value: "Refund please" },
+    target: { value: "Need access" },
   });
   await act(async () => {
     fireEvent.click(screen.getByRole("button", { name: "Create ticket" }));
   });
-  expect(screen.getByText("Classified by Jev")).toBeTruthy();
-  expect(screen.getByText("Billing · Standard")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "New request" })).toBeTruthy();
   expect(
-    screen.queryByRole("button", { name: "Run classification" }),
+    screen.queryByRole("button", { name: "Explore question types" }),
   ).toBeNull();
   expect(
     vi
       .mocked(fetch)
       .mock.calls.filter(([, options]) => options?.method === "POST").length,
   ).toBe(1);
+});
+
+test("failed ticket retains message and offers retry", async () => {
+  mockQueue([
+    {
+      ...ticket,
+      classification: null,
+      status: "failed",
+      error: "Jev could not complete the request.",
+    },
+  ]);
+  await act(async () => {
+    render(<App />);
+  });
+  fireEvent.click(screen.getByRole("button", { name: "GitHub is locked" }));
+  expect(screen.getByText("My work account is locked.")).toBeTruthy();
+  await act(async () => {
+    fireEvent.click(
+      screen.getByRole("button", { name: "Retry classification" }),
+    );
+  });
+  expect(screen.getByText("Classification updated.")).toBeTruthy();
+});
+
+test("needs review filter excludes accepted tickets", async () => {
+  mockQueue([
+    {
+      ...ticket,
+      classification: {
+        ...classification,
+        review_required: false,
+        priority: {
+          ...classification.priority,
+          needs_review: false,
+          probability: 0.9,
+        },
+      },
+    },
+  ]);
+  await act(async () => {
+    render(<App />);
+  });
+  fireEvent.click(screen.getByRole("button", { name: /Needs review 0/ }));
+  expect(screen.getByText("Nothing needs review")).toBeTruthy();
+});
+
+test("a delayed poll cannot remove a newly created ticket", async () => {
+  vi.useFakeTimers();
+  let resolvePoll: (value: Response) => void = () => {};
+  let reads = 0;
+  mockQueue();
+  const original = vi.mocked(fetch).getMockImplementation()!;
+  vi.mocked(fetch).mockImplementation((input, options) => {
+    if (input === "/api/tickets" && options?.method === "GET") {
+      if (++reads === 1)
+        return Promise.resolve(
+          response([{ ...ticket, status: "running", classification: null }]),
+        );
+      return new Promise((resolve) => {
+        resolvePoll = resolve;
+      });
+    }
+    return original(input, options);
+  });
+  await act(async () => {
+    render(<App />);
+  });
+  await act(async () => {
+    vi.advanceTimersByTime(2000);
+  });
+  fireEvent.click(screen.getByRole("button", { name: "New ticket" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "Subject" }), {
+    target: { value: "New request" },
+  });
+  fireEvent.change(screen.getByRole("textbox", { name: "Message" }), {
+    target: { value: "Need access" },
+  });
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Create ticket" }));
+  });
+  await act(async () => {
+    resolvePoll(response([ticket]));
+  });
+  expect(screen.getByRole("button", { name: "New request" })).toBeTruthy();
 });

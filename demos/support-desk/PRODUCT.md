@@ -1,13 +1,5 @@
-# Jev Support Desk demo
+# Jev ticket queue
 
-## Users and purpose
+A local screen-recording demo for an internal tech-company request queue. The user creates a ticket and Jev classifies its Department (HR, Finance, Engineering, IT Support, Other) and Priority (Low, Normal, High, Critical). Both show category probabilities, with field and ticket review flags below 80%.
 
-Owain presents a customer support inbox to Python developers on YouTube. Viewers see the same ticket evaluated with Choice, Noul, Score, then Combined. The app makes the question and model output visible before explaining Python routing policy.
-
-## Platform and scope
-
-Web: React and TypeScript, FastAPI, SQLite. Standalone dependencies and data, no imports from the tutorial modules. Local loopback use. Synthetic presets and presenter-created tickets. Actual Jev calls, no simulated results. No refunds, email integration, or generated replies.
-
-## Confirmed surface
-
-The user approved a three-panel inbox, a four-mode selector, explicit Run classification, expandable Python and raw output, preset tickets, and Combined-only routing. Preserve that composition and the established white-and-green visual system.
+The approved UI is one queue, a New ticket form, and expandable request details. Remove earlier teaching-mode controls. Preserve the established warm-white and green visual style. Stack: React + TypeScript, FastAPI, SQLite. No simulation, automatic business actions, hosted deployment, or imports from the tutorial modules.

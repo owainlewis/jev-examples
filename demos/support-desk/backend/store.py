@@ -7,32 +7,6 @@ from time import time
 from uuid import uuid4
 
 LEASE_SECONDS = 90
-PRESETS = [
-    {
-        "subject": "Charged twice for our subscription",
-        "body": "Hi, our subscription payment went through twice this morning. Please refund the duplicate charge. We can still use the product and complete our work normally.",
-        "customer": "Amelia Chen",
-        "preset": "Refund",
-    },
-    {
-        "subject": "Our whole team is locked out of projects",
-        "body": "Every project returns a 500 error for all 18 people on our team. Nobody can finish their work. We have tried another browser and there is no workaround. Please investigate the outage.",
-        "customer": "Marcus Reed",
-        "preset": "Outage",
-    },
-    {
-        "subject": "Something is wrong with my workspace",
-        "body": "Something seems off with my workspace today. Could somebody take a look?",
-        "customer": "Sofia Patel",
-        "preset": "Ambiguous",
-    },
-    {
-        "subject": "Please update my account email",
-        "body": "I need to change the email address on my account. I can still sign in and complete all my work normally. Can you help me update my profile?",
-        "customer": "Leo Martin",
-        "preset": "Account",
-    },
-]
 
 
 class Conflict(Exception):
@@ -63,7 +37,6 @@ class Store:
                 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY);
             """)
             if not db.execute("SELECT 1 FROM meta WHERE key='seeded'").fetchone():
-                self._seed(db)
                 db.execute("INSERT INTO meta VALUES ('seeded')")
 
     @contextmanager
@@ -91,10 +64,6 @@ class Store:
             ),
         )
         return identifier
-
-    def _seed(self, db):
-        for data in reversed(PRESETS):
-            self._insert(db, data)
 
     def _expire(self, db):
         db.execute(
@@ -177,20 +146,12 @@ class Store:
                     identifier,
                 ),
             )
-            if result and run["mode"] == "combined":
+            if result and run["mode"] == "triage":
                 db.execute(
                     "UPDATE tickets SET routing=? WHERE id=?",
                     (json.dumps(result["policy"]), run["ticket_id"]),
                 )
             return self._snapshot(db, run["ticket_id"])
-
-    def correct(self, identifier, data):
-        with self.connection() as db:
-            db.execute(
-                "UPDATE tickets SET correction=? WHERE id=?",
-                (json.dumps(data), identifier),
-            )
-            return self._snapshot(db, identifier)
 
     def reset(self):
         with self.connection() as db:
@@ -201,5 +162,4 @@ class Store:
                     "Wait for classification to finish before resetting the demo."
                 )
             db.execute("DELETE FROM tickets")
-            self._seed(db)
             return self._list(db)
