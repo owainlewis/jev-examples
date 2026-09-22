@@ -114,6 +114,9 @@ class WorkflowTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.json()["subject"], "Test")
+        self.assertEqual(response.json()["routing"]["team"], "billing")
+        self.assertEqual(response.json()["runs"][0]["mode"], "combined")
+        self.assertEqual(len(self.calls), 1)
         self.assertEqual(len(self.client.get("/api/tickets").json()), 5)
         tickets = self.client.post("/api/reset", json={}).json()
         self.assertEqual(len(tickets), 4)
@@ -274,12 +277,11 @@ class WorkflowTests(unittest.TestCase):
                 store.reset()
 
         with patch.object(store, "connection", connection):
-            response = self.client.post(
-                "/api/tickets", json={"subject": "Saved", "body": "A real ticket"}
+            saved = store.create(
+                {"subject": "Saved", "body": "A real ticket", "customer": "Sam"}
             )
-        self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.json()["subject"], "Saved")
-        self.assertEqual(response.json()["runs"], [])
+        self.assertEqual(saved["subject"], "Saved")
+        self.assertEqual(saved["runs"], [])
         self.assertEqual(len(store.list()), 4)
 
     def test_reset_between_run_lookup_and_claim_returns_not_found(self):
@@ -301,6 +303,25 @@ class WorkflowTests(unittest.TestCase):
             json={"team": "billing", "priority": "standard"},
         )
         self.assertEqual(response.status_code, 404)
+
+    def test_automatic_failure_returns_saved_ticket_and_can_retry(self):
+        def fail(ticket, mode):
+            raise RuntimeError("private-key")
+
+        with TestClient(create_app(self.path, fail), headers=HEADERS) as client:
+            response = client.post(
+                "/api/tickets", json={"subject": "Refund", "body": "Please refund me."}
+            )
+        self.assertEqual(response.status_code, 201)
+        saved = response.json()
+        self.assertEqual(saved["runs"][0]["status"], "failed")
+        self.assertIsNone(saved["routing"])
+        self.assertNotIn("private-key", response.text)
+        retry = self.client.post(
+            f"/api/tickets/{saved['id']}/runs", json={"mode": "combined"}
+        )
+        self.assertEqual(retry.status_code, 200)
+        self.assertEqual(retry.json()["routing"]["team"], "billing")
 
     def test_config_never_returns_api_key(self):
         with patch.dict("os.environ", {"TYPESAFE_API_KEY": "private-test-key"}):

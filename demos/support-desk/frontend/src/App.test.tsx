@@ -52,6 +52,34 @@ beforeEach(() => {
     "fetch",
     vi.fn((url: string, options: RequestInit) => {
       if (url === "/api/config") return Promise.resolve(response(config));
+      if (url === "/api/tickets" && options.method === "POST") {
+        return Promise.resolve(
+          response({
+            ...ticket,
+            ...JSON.parse(options.body as string),
+            id: "created",
+            runs: [
+              {
+                id: "auto",
+                mode: "combined",
+                status: "succeeded",
+                error: null,
+                result: {
+                  raw: { answers: {} },
+                  elapsed_ms: 150,
+                  policy: {
+                    team: "billing",
+                    priority: "standard",
+                    refund: "requested",
+                    review_required: false,
+                    reasons: [],
+                  },
+                },
+              },
+            ],
+          }),
+        );
+      }
       if (url === "/api/tickets") {
         reads++;
         if (reads === 1) return Promise.resolve(response([ticket]));
@@ -102,6 +130,9 @@ test("switching modes keeps the ticket and makes no mutation request", async () 
   await act(async () => {
     render(<App />);
   });
+  fireEvent.click(
+    screen.getByRole("button", { name: "Explore question types" }),
+  );
   for (const mode of ["Noul", "Score", "Combined", "Choice"]) {
     fireEvent.click(screen.getByRole("button", { name: mode }));
     expect(
@@ -150,4 +181,31 @@ test("a late poll cannot restore tickets removed by reset", async () => {
   expect(
     screen.queryByRole("heading", { name: "A refund", level: 2 }),
   ).toBeNull();
+});
+
+test("create automatically shows its result with no second classification click", async () => {
+  await act(async () => {
+    render(<App />);
+  });
+  expect(screen.queryByRole("group", { name: "Demo mode" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "New ticket" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "Subject" }), {
+    target: { value: "New refund" },
+  });
+  fireEvent.change(screen.getByRole("textbox", { name: "Message" }), {
+    target: { value: "Refund please" },
+  });
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Create ticket" }));
+  });
+  expect(screen.getByText("Classified by Jev")).toBeTruthy();
+  expect(screen.getByText("Billing · Standard")).toBeTruthy();
+  expect(
+    screen.queryByRole("button", { name: "Run classification" }),
+  ).toBeNull();
+  expect(
+    vi
+      .mocked(fetch)
+      .mock.calls.filter(([, options]) => options?.method === "POST").length,
+  ).toBe(1);
 });

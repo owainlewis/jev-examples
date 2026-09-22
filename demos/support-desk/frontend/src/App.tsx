@@ -225,7 +225,8 @@ export function App() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [config, setConfig] = useState<Config | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [mode, setMode] = useState<Mode>("choice");
+  const [mode, setMode] = useState<Mode>("combined");
+  const [exploring, setExploring] = useState(false);
   const [queue, setQueue] = useState("all");
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -342,10 +343,16 @@ export function App() {
         "POST",
         Object.fromEntries(form),
       );
-      await refresh();
+      setTickets((current) => [ticket, ...current]);
       setQueue("all");
+      setMode("combined");
+      setExploring(false);
       choose(ticket);
-      setNotice("Ticket saved. Choose a mode to classify it.");
+      setNotice(
+        ticket.runs[0]?.status === "failed"
+          ? "Ticket saved. Automatic classification failed; you can retry below."
+          : `Ticket created and classified. ${label(queueOf(ticket))}.`,
+      );
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -388,7 +395,7 @@ export function App() {
       setTickets(next);
       setSelectedId(next[0]?.id ?? null);
       setQueue("all");
-      setMode("choice");
+      setMode("combined");
       setCompose(false);
       setCorrecting(false);
       setResetting(false);
@@ -515,32 +522,48 @@ export function App() {
             <span className="model-name">{config?.model ?? "Jev"}</span>
           </div>
           <div className="mode-toolbar">
-            <span id="mode-label">Demo mode</span>
-            <div
-              className="mode-switch"
-              role="group"
-              aria-labelledby="mode-label"
+            <span>New tickets are classified automatically</span>
+            <button
+              className="quiet"
+              disabled={busy}
+              aria-pressed={exploring}
+              onClick={() => {
+                setExploring(!exploring);
+                setMode("combined");
+              }}
             >
-              {MODES.map((item) => (
-                <button
-                  key={item}
-                  disabled={busy}
-                  aria-pressed={mode === item}
-                  className={mode === item ? "active" : ""}
-                  onClick={() => {
-                    setMode(item);
-                    setError("");
-                    setNotice("");
-                  }}
-                >
-                  {item === "combined" && <Layers3 size={14} />} {label(item)}
-                </button>
-              ))}
-            </div>
-            <span className="mode-hint">
-              {mode === "combined" ? "Apply routing" : "Preview a decision"}
-            </span>
+              {exploring ? "Back to inbox" : "Explore question types"}
+            </button>
           </div>
+          {exploring && (
+            <div className="mode-toolbar">
+              <span id="mode-label">Demo mode</span>
+              <div
+                className="mode-switch"
+                role="group"
+                aria-labelledby="mode-label"
+              >
+                {MODES.map((item) => (
+                  <button
+                    key={item}
+                    disabled={busy}
+                    aria-pressed={mode === item}
+                    className={mode === item ? "active" : ""}
+                    onClick={() => {
+                      setMode(item);
+                      setError("");
+                      setNotice("");
+                    }}
+                  >
+                    {item === "combined" && <Layers3 size={14} />} {label(item)}
+                  </button>
+                ))}
+              </div>
+              <span className="mode-hint">
+                {mode === "combined" ? "Apply routing" : "Preview a decision"}
+              </span>
+            </div>
+          )}
           {error && (
             <div className="message error" role="alert">
               {error}
@@ -620,7 +643,8 @@ export function App() {
                     </button>
                   </div>
                   <p>
-                    Write a customer message, then explore it with each type.
+                    Write a customer message. Jev will assign its team and
+                    priority when you create it.
                   </p>
                   <label>
                     Customer name
@@ -652,7 +676,7 @@ export function App() {
                     />
                   </label>
                   <button className="primary" disabled={busy}>
-                    Save ticket
+                    {busy ? "Creating and classifying…" : "Create ticket"}
                     <ArrowRight size={16} />
                   </button>
                 </form>
@@ -726,82 +750,94 @@ export function App() {
                     )}
                   </div>
                   <div className="decision-panel">
-                    <div className="decision-heading">
-                      <span className="type-label">{label(mode)}</span>
-                      <span>
-                        {mode === "combined"
-                          ? "4 questions · 1 request"
-                          : "1 question · 1 request"}
-                      </span>
-                    </div>
-                    <h3>{modeCopy[mode].title}</h3>
-                    <p className="decision-description">
-                      {modeCopy[mode].description}
-                    </p>
-                    {mode === "combined" && (
-                      <div className="question-list">
+                    {exploring && (
+                      <>
+                        <div className="decision-heading">
+                          <span className="type-label">{label(mode)}</span>
+                          <span>
+                            {mode === "combined"
+                              ? "4 questions · 1 request"
+                              : "1 question · 1 request"}
+                          </span>
+                        </div>
+                        <h3>{modeCopy[mode].title}</h3>
+                        <p className="decision-description">
+                          {modeCopy[mode].description}
+                        </p>
+                        {mode === "combined" && (
+                          <div className="question-list">
+                            <span>
+                              <b>Choice</b> Team
+                            </span>
+                            <span>
+                              <b>Noul</b> Refund requested
+                            </span>
+                            <span>
+                              <b>Score</b> Impact
+                            </span>
+                            <span>
+                              <b>Noul</b> Impact stated
+                            </span>
+                          </div>
+                        )}
+                        <details className="question-details">
+                          <summary>
+                            Inspect the question{mode === "combined" ? "s" : ""}
+                            <ChevronDown size={14} />
+                          </summary>
+                          {config &&
+                            Object.entries(config.modes[mode].questions).map(
+                              ([key, question]) => (
+                                <div key={key}>
+                                  <strong>
+                                    {key} · {question.type}
+                                  </strong>
+                                  <p>{question.instructions}</p>
+                                  {question.criteria && (
+                                    <ul>
+                                      {Object.entries(question.criteria).map(
+                                        ([name, description]) => (
+                                          <li key={name}>
+                                            <b>{label(name)}</b>: {description}
+                                          </li>
+                                        ),
+                                      )}
+                                    </ul>
+                                  )}
+                                </div>
+                              ),
+                            )}
+                        </details>
+                      </>
+                    )}
+                    {(exploring || !run?.result) && (
+                      <div className="run-row">
+                        <button
+                          className="primary"
+                          disabled={busy || active || !config?.configured}
+                          onClick={() => void classify()}
+                        >
+                          {busy || active ? (
+                            <LoaderCircle size={17} className="spinner" />
+                          ) : (
+                            <Sparkles size={17} />
+                          )}{" "}
+                          {busy || active
+                            ? "Classifying…"
+                            : exploring
+                              ? "Run classification"
+                              : run?.status === "failed"
+                                ? "Retry classification"
+                                : "Classify sample"}
+                          {!busy && !active && <ArrowRight size={16} />}
+                        </button>
                         <span>
-                          <b>Choice</b> Team
-                        </span>
-                        <span>
-                          <b>Noul</b> Refund requested
-                        </span>
-                        <span>
-                          <b>Score</b> Impact
-                        </span>
-                        <span>
-                          <b>Noul</b> Impact stated
+                          {mode === "combined"
+                            ? "Saves the routing decision"
+                            : "Leaves the ticket’s queue unchanged"}
                         </span>
                       </div>
                     )}
-                    <details className="question-details">
-                      <summary>
-                        Inspect the question{mode === "combined" ? "s" : ""}
-                        <ChevronDown size={14} />
-                      </summary>
-                      {config &&
-                        Object.entries(config.modes[mode].questions).map(
-                          ([key, question]) => (
-                            <div key={key}>
-                              <strong>
-                                {key} · {question.type}
-                              </strong>
-                              <p>{question.instructions}</p>
-                              {question.criteria && (
-                                <ul>
-                                  {Object.entries(question.criteria).map(
-                                    ([name, description]) => (
-                                      <li key={name}>
-                                        <b>{label(name)}</b>: {description}
-                                      </li>
-                                    ),
-                                  )}
-                                </ul>
-                              )}
-                            </div>
-                          ),
-                        )}
-                    </details>
-                    <div className="run-row">
-                      <button
-                        className="primary"
-                        disabled={busy || active || !config?.configured}
-                        onClick={() => void classify()}
-                      >
-                        {busy || active ? (
-                          <LoaderCircle size={17} className="spinner" />
-                        ) : (
-                          <Sparkles size={17} />
-                        )}{" "}
-                        {busy || active ? "Classifying…" : "Run classification"}
-                        {!busy && !active && <ArrowRight size={16} />}
-                      </button>
-                      <span>
-                        {mode === "combined"
-                          ? "Saves the routing decision"
-                          : "Leaves the ticket’s queue unchanged"}
-                      </span>
-                    </div>
                     <div
                       className="results"
                       aria-live="polite"
@@ -819,18 +855,19 @@ export function App() {
                       ) : run?.result && config ? (
                         <>
                           <div className="result-heading">
-                            <strong>Classification result</strong>
+                            <strong>Classified by Jev</strong>
                             <span>{run.result.elapsed_ms.toFixed(0)} ms</span>
                           </div>
-                          {Object.entries(config.modes[mode].questions).map(
-                            ([key, question]) => (
-                              <AnswerView
-                                key={run.id + key}
-                                question={question}
-                                answer={run.result!.raw.answers[key]}
-                              />
-                            ),
-                          )}
+                          {exploring &&
+                            Object.entries(config.modes[mode].questions).map(
+                              ([key, question]) => (
+                                <AnswerView
+                                  key={run.id + key}
+                                  question={question}
+                                  answer={run.result!.raw.answers[key]}
+                                />
+                              ),
+                            )}
                           {run.result.policy && (
                             <div
                               className={`policy ${run.result.policy.review_required ? "review" : ""}`}
@@ -862,40 +899,44 @@ export function App() {
                           </span>
                           <strong>Your decision will appear here</strong>
                           <p>
-                            Run {label(mode)} to see the actual model response.
+                            {exploring
+                              ? `Run ${label(mode)} to see the actual model response.`
+                              : "This sample is ready to classify. New tickets are classified automatically."}
                           </p>
                         </div>
                       )}
                     </div>
-                    <div className="developer-details">
-                      <details>
-                        <summary>
-                          <Code2 size={16} />
-                          Python code
-                          <ChevronDown size={14} />
-                        </summary>
-                        <p>
-                          This runnable example uses the same question
-                          definitions as the app. Replace its sample ticket to
-                          try your own.
-                        </p>
-                        <pre>
-                          <code>{config?.modes[mode].python}</code>
-                        </pre>
-                      </details>
-                      <details>
-                        <summary>
-                          <Layers3 size={16} />
-                          Raw response
-                          <ChevronDown size={14} />
-                        </summary>
-                        <pre>
-                          {run?.result
-                            ? JSON.stringify(run.result.raw, null, 2)
-                            : "Run classification to see a response."}
-                        </pre>
-                      </details>
-                    </div>
+                    {exploring && (
+                      <div className="developer-details">
+                        <details>
+                          <summary>
+                            <Code2 size={16} />
+                            Python code
+                            <ChevronDown size={14} />
+                          </summary>
+                          <p>
+                            This runnable example uses the same question
+                            definitions as the app. Replace its sample ticket to
+                            try your own.
+                          </p>
+                          <pre>
+                            <code>{config?.modes[mode].python}</code>
+                          </pre>
+                        </details>
+                        <details>
+                          <summary>
+                            <Layers3 size={16} />
+                            Raw response
+                            <ChevronDown size={14} />
+                          </summary>
+                          <pre>
+                            {run?.result
+                              ? JSON.stringify(run.result.raw, null, 2)
+                              : "Run classification to see a response."}
+                          </pre>
+                        </details>
+                      </div>
+                    )}
                   </div>
                 </>
               ) : (

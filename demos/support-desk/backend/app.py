@@ -90,18 +90,24 @@ def create_app(database=None, classify_fn=None):
 
     @application.post("/api/tickets", status_code=201)
     def create_ticket(data: TicketInput):
-        return store.create(data.model_dump())
+        ticket = store.create(data.model_dump())
+        return run_ticket(ticket, "combined", raise_on_failure=False)
 
     @application.post("/api/tickets/{identifier}/runs")
     def run(identifier: str, data: RunInput):
         ticket = store.get(identifier)
-        run_id = store.claim(identifier, data.mode)
+        return run_ticket(ticket, data.mode)
+
+    def run_ticket(ticket, mode, raise_on_failure=True):
+        run_id = store.claim(ticket["id"], mode)
         try:
-            result = provider(ticket, data.mode)
+            result = provider(ticket, mode)
         except Exception:
             # Provider errors can contain request details. Never return them to the browser.
             error = "Jev could not complete the request. Check the backend API key and connection, then try again. Your ticket is saved."
-            store.finish(run_id, error=error)
+            saved = store.finish(run_id, error=error)
+            if not raise_on_failure and saved:
+                return saved
             raise HTTPException(502, error) from None
         completed = store.finish(run_id, result=result)
         if not completed:

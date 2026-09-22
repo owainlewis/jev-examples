@@ -71,3 +71,7 @@ Buttons have pale hover fills, darker green primary hover, and disabled opacity 
 - Keep labelled results and request status readable at desktop and mobile widths.
 - Do not imply a refund flag authorizes a payment or fill empty states with simulated output.
 - Keep technical details inside the existing expandable sections.
+
+## Simplified inbox update
+
+New tickets classify automatically on creation. The default result is compact: team, priority, refund intent, and any review reason. The mode selector, per-question distributions, and code/raw panels are behind Explore question types. Back to inbox restores Combined. Seed samples require an explicit classification so loading or resetting the app does not incur API calls.

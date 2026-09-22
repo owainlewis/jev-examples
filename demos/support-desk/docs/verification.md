@@ -42,3 +42,9 @@ Independent code review found reset transaction gaps and stale polling responses
 Screenshots: [desktop](evidence/desktop.png), [mobile inbox](evidence/mobile.png), [mobile result](evidence/mobile-result.png). Captures show real rehearsal state before resetting the demo. Viewport captures were used because this browser's full-page stitching produced a malformed image.
 
 Only local use was tested. The small synthetic sample does not measure model accuracy, calibrate the thresholds, or establish a latency benchmark. No authentication, multi-user hosting, mailbox integration, or refund execution is included.
+
+## Automatic classification update
+
+The simplified flow passes 16 backend tests and 4 React tests, plus the production build. New regression tests prove one Combined call on creation, saved-ticket responses when the provider fails, successful retry, and a frontend result without a second classification click. The explorer is hidden by default. Earlier screenshots above show the original teaching-first layout.
+
+Live browser verification of the update: creating a refund ticket automatically produced Billing / Standard in 840 ms, with no extra run click. Explore question types and Back to inbox toggled the teaching controls. Desktop and 390px mobile had no observed layout overflow; the browser console was clean. An invalid-key instance returned the saved custom ticket with Classification did not complete and an enabled Retry classification button. Independent review approved the update. Updated captures: [automatic desktop](evidence/automatic-desktop.png) and [automatic mobile](evidence/automatic-mobile.png).

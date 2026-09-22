@@ -32,7 +32,7 @@ Start the app:
 uvicorn backend.app:app --host 127.0.0.1 --port 8000
 ```
 
-Open **http://127.0.0.1:8000**. Four synthetic tickets are created on first startup. Every classification calls Jev; changing mode does not. Each click uses your TypeSafe account.
+Open **http://127.0.0.1:8000**. Four synthetic tickets are created on first startup. Creating a ticket automatically calls Jev once with Combined and saves its team and priority. The four initial samples remain unclassified until you choose Classify sample. Explore question types reveals the optional teaching controls; changing mode does not call Jev. Each click uses your TypeSafe account.
 
 For frontend development, keep that backend running and use a second terminal:
 
@@ -60,21 +60,18 @@ Expand **Inspect the question**, **Python code**, or **Raw response** to explain
 
 ## Recording sequence
 
-1. Select Amelia's refund ticket. Run Choice. Explain the selected team and distribution.
-2. Switch to Noul. Show that changing mode costs no request. Run it to reveal refund probability.
-3. Switch to Score. Explain why work continuing normally should receive low impact.
-4. Run Combined. Show the saved queue and priority, then filter Billing.
-5. Open All tickets and select Marcus's outage. Run Combined and inspect its priority.
-6. Select Sofia's vague request. Run Combined and explain why insufficient context needs review.
-7. Click Correct to save a human team/priority decision. The original response remains visible; later model runs never replace the correction.
-8. Create your own ticket and classify it. Reload to demonstrate persistence.
-9. Reset demo restores the original unclassified samples after confirmation. This deletes only this demo's tickets, runs, and corrections.
+1. Click New ticket, enter a customer message, and click Create ticket. Jev automatically classifies it and saves the team and priority.
+2. Create a clear refund, an outage, and a vague request. Show automatic routing and human review.
+3. Filter by team. Use Correct to save a human decision separately from the model result.
+4. For the API lesson, click Explore question types. Switch between Choice, Noul, Score, and Combined on the same ticket, then explicitly run a preview. Python code, question details, and raw responses are available here.
+5. Click Back to inbox to return to the simple view. Reload to demonstrate persistence.
+6. Reset demo restores unclassified synthetic presets after confirmation; it never spends API credits by itself.
 
-Actual model answers may vary. Explain surprising results instead of substituting fabricated output. Timing is measured around the SDK request and is not a benchmark comparison.
+Actual model answers may vary. Timing is measured around the SDK request and is not a benchmark comparison. The app uses the real `typesafe-sdk` against `https://api.typesafe.ai`; it has no simulated response mode. Account balance is not available in these classification responses. Check your TypeSafe console for balance and usage.
 
 ## Data, recovery, and boundaries
 
-SQLite lives at `instance/desk.sqlite3`, ignored by Git. Set `SUPPORT_DESK_DB` to use another database. Tickets are saved before classification. Failures leave prior results and routing intact and allow a new run. Runs persist in SQLite; the interface shows the latest run for the selected mode. A new failed run shows its error rather than presenting an older success as current.
+SQLite lives at `instance/desk.sqlite3`, ignored by Git. Set `SUPPORT_DESK_DB` to use another database. Tickets are saved before classification. A classification failure during creation still returns the saved ticket, with the error and Retry classification visible. Failures leave prior results and routing intact and allow a new run. Runs persist in SQLite; the interface shows the latest run for the selected mode. A new failed run shows its error rather than presenting an older success as current.
 
 One run per ticket can be active. Calls have a 30-second timeout with no automatic retry. Abandoned runs expire after 90 seconds; a late response cannot replace newer results. Reset refuses while any unexpired run is active. The interface polls for a run already in progress after reload.
 

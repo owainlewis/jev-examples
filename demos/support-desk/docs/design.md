@@ -6,7 +6,7 @@ Build the agreed three-panel support inbox for screen recording, separate from t
 
 ## 2. Behaviour and decisions
 
-The presenter selects a preset or creates a ticket, selects a mode, reads the question, and clicks Run classification. Changing mode never calls the API. Single types are previews; Combined asks all questions in one request and applies Python routing policy. Missing impact or uncertainty sends the ticket to Needs review. A refund flag describes intent, never authorises payment. Human corrections remain separate from model output and survive later runs.
+Creating a ticket automatically makes one Combined request before returning the saved ticket, including any classification error. The default inbox shows a compact result. Explore question types reveals the optional selector, probability details, and Python/raw panels. Presets remain unclassified until explicitly run, so startup and reset do not spend credits. Changing mode never calls the API. Single types are previews; Combined asks all questions in one request and applies Python routing policy. Missing impact or uncertainty sends the ticket to Needs review. A refund flag describes intent, never authorises payment. Human corrections remain separate from model output and survive later runs.
 
 The existing warm white, ink, and green visual system carries into the agreed queue/list/detail composition. A horizontal segmented mode control and visible question make the teaching sequence clear. Results use labelled bars, a binary meter, and an ordered impact rubric. Code and raw response are expandable. Mobile stacks the panels. No comp selection is needed because the user has approved this composition and asked to build it.
 
@@ -20,7 +20,7 @@ Bind to loopback. Keep the API key in the backend environment; never put it in f
 
 ## 5. Acceptance criteria and invariants
 
-- AC-1: Four modes make requests only on an explicit click; each includes exactly the declared questions.
+- AC-1: Creating a ticket automatically makes exactly one Combined request; failures preserve the created ticket. The optional four-mode explorer makes requests only on an explicit run click; each includes exactly the declared questions.
 - AC-2: Choice displays its distribution; Noul displays true/false probability; Score displays its ordered distribution and weighted score. Code is generated from the same question definitions used by the backend.
 - AC-3: Only Combined applies automatic routing, with review on unclear impact or uncertain answers. Saved routing survives restart.
 - AC-4: Create, presets, queue filters, manual corrections, and reset work. Corrections remain distinct from original results.
