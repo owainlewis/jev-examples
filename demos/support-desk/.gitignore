@@ -1,0 +1,9 @@
+.venv/
+.env
+node_modules/
+dist/
+instance/
+__pycache__/
+*.pyc
+
+*.tsbuildinfo
