@@ -7,7 +7,7 @@ Three small Python examples and a working ticket queue.
 | [src/01-noul.py](src/01-noul.py) | Noul: the probability of a yes/no answer |
 | [src/02-choice.py](src/02-choice.py) | Choice: pick a team from named categories |
 | [src/03-score.py](src/03-score.py) | Score: assess impact against an ordered rubric |
-| [docs/VIDEO.md](docs/VIDEO.md) | The video walkthrough, from the first API call to the app |
+| [docs/video.md](docs/video.md) | Tutorial covering the Python examples, support app, and Codex router |
 | [demos/support-desk](demos/support-desk/README.md) | Python, React, and SQLite ticket queue with automatic department and priority classification |
 | [demos/codex-router](demos/codex-router/README.md) | Shareable skill: Jev selects a model and Codex creates a new task |
 
@@ -40,4 +40,4 @@ Each script makes a real call to Jev using an invented ticket. Python dependenci
 
 Follow [the app setup](demos/support-desk/README.md). The demo has its own Python environment and frontend dependencies. Creating a ticket automatically classifies department and priority, shows the probabilities, and flags uncertain results for review.
 
-Read [the video walkthrough](docs/VIDEO.md) for the explanation and recording order.
+Read [the tutorial](docs/video.md) for setup, examples, and explanations.
