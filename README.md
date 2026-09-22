@@ -12,6 +12,10 @@ Three small Python examples and a working ticket queue.
 | [demos/codex-router](demos/codex-router/README.md) | Shareable skill: Jev selects a model and Codex creates a new task |
 | [demos/trading-sim](demos/trading-sim/README.md) | Live prices, Jev buy/hold/sell decisions, and a simulated portfolio |
 
+## Issue readiness skill
+
+[Install and try issue-ready](demos/issue-ready/README.md) to assess GitHub issues with Jev and apply readiness labels. Includes local examples for rehearsing the demo.
+
 ## Run the Python examples
 
 Install [uv](https://docs.astral.sh/uv/getting-started/installation/). From this folder:
