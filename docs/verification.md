@@ -1,6 +1,6 @@
 # Verification
 
-Checked locally on 21 September 2026 with Python 3.14 and the pinned dependencies in `requirements.txt`. The SDK declares Python 3.10+ support; this run did not exercise every supported Python version.
+Checked locally on 21 September 2026 with Python 3.14 and the pinned dependencies in the then-current `requirements.txt` (now managed in `pyproject.toml` and `uv.lock`). The SDK declares Python 3.10+ support; this run did not exercise every supported Python version.
 
 ## Acceptance checks
 
@@ -14,10 +14,12 @@ Checked locally on 21 September 2026 with Python 3.14 and the pinned dependencie
 
 ## Automated checks
 
+Equivalent commands for the current uv setup:
+
 ```bash
-.venv/bin/python -W error::ResourceWarning -m unittest discover -s tests -v
-.venv/bin/python -m compileall -q examples jev_tutorial src
-.venv/bin/python -m pip check
+uv run python -W error::ResourceWarning -m unittest discover -s tests -v
+uv run python -m compileall -q examples jev_tutorial src
+uv pip check
 git diff --check
 ```
 

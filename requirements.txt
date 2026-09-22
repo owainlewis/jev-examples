@@ -1,3 +1,0 @@
-typesafe-sdk==0.7.0
-python-dotenv==1.2.1
-Flask==3.1.2
