@@ -1,6 +1,6 @@
 # Jev examples
 
-Three small Python examples and a working ticket queue.
+Small Python examples and complete local demos for Jev.
 
 | File | What it shows |
 | --- | --- |
@@ -11,6 +11,7 @@ Three small Python examples and a working ticket queue.
 | [demos/support-desk](demos/support-desk/README.md) | Python, React, and SQLite ticket queue with automatic department and priority classification |
 | [demos/codex-router](demos/codex-router/README.md) | Shareable skill: Jev selects a model and Codex creates a new task |
 | [demos/trading-sim](demos/trading-sim/README.md) | Live prices, Jev buy/hold/sell decisions, and a simulated portfolio |
+| [demos/feedback-lens](demos/feedback-lens/README.md) | A browser workbench showing Choice, Noul, and Score on customer feedback, with an interactive review threshold |
 
 ## Issue readiness skill
 
