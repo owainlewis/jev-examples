@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#fafafa" />
+    <link rel="icon" href="/mark.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/style.css" />
+    <title>Feedback Lens · Jev</title>
+    <script type="module" src="/app.mjs"></script>
+  </head>
+  <body>
+    <header>
+      <a class="brand" href="/" aria-label="Feedback Lens home"
+        ><img src="/mark.svg" alt="" width="30" height="30" />Feedback Lens</a
+      >
+      <span class="connection" id="connection"
+        >Connecting to local server…</span
+      >
+    </header>
+    <main>
+      <div class="intro">
+        <h1>Read between the feedback.</h1>
+        <p>
+          One customer message. Three structured judgments from Jev.<br
+            class="desktop-break"
+          />
+          See what it thinks, how certain it is, and where your rules take over.
+        </p>
+      </div>
+      <div id="setup-error" class="alert" role="alert" hidden></div>
+      <button id="reconnect" class="secondary" hidden>
+        Reconnect to server
+      </button>
+      <div class="workbench">
+        <section class="input-pane" aria-labelledby="input-title">
+          <div class="section-heading">
+            <h2 id="input-title">The customer’s words</h2>
+            <span class="quiet">Input</span>
+          </div>
+          <form id="feedback-form">
+            <label for="example">Start with a fictional example</label>
+            <select id="example" disabled>
+              <option value="">Choose an example…</option>
+            </select>
+            <p id="example-hint" class="help">
+              Examples fill the editor. They do not call Jev.
+            </p>
+            <label for="feedback">Feedback</label>
+            <textarea
+              id="feedback"
+              name="feedback"
+              rows="9"
+              maxlength="6000"
+              required
+              placeholder="Paste a customer message, or choose an example above…"
+              aria-describedby="privacy count"
+            ></textarea>
+            <div class="editor-footer">
+              <span id="count">0 / 6,000</span
+              ><button id="clear" type="button" class="text-button">
+                Clear
+              </button>
+            </div>
+            <button id="analyze" type="submit" class="primary" disabled>
+              Analyze feedback <span aria-hidden="true">↗</span>
+            </button>
+            <p id="privacy" class="help">
+              Sends this text to TypeSafe. Your API key stays on the server.
+              This app does not save feedback.
+            </p>
+          </form>
+          <div id="request-error" class="alert" role="alert" hidden></div>
+          <div class="reading-note">
+            <h3>Try changing one detail.</h3>
+            <p>
+              Replace “I can use CSV instead” with “I have no workaround.” Run
+              it again and compare the impact. Every result comes from a real
+              request.
+            </p>
+          </div>
+        </section>
+        <section
+          class="output-pane"
+          aria-labelledby="output-title"
+          aria-busy="false"
+          id="output-pane"
+        >
+          <div class="section-heading">
+            <h2 id="output-title" tabindex="-1">Jev’s reading</h2>
+            <span id="run-meta" class="quiet">No analysis yet</span>
+          </div>
+          <p id="run-status" class="help" role="status" aria-live="polite">
+            Ready when you are. No API call has been made.
+          </p>
+          <div id="empty-state">
+            <div class="empty-diagram" aria-hidden="true">
+              <span>Feedback</span
+              ><svg viewBox="0 0 180 84">
+                <path d="M0 42H70M70 12V72M70 12H180M70 42H180M70 72H180" />
+              </svg>
+              <div><span>Choice</span><span>Noul</span><span>Score</span></div>
+            </div>
+            <h3>Useful structure, visible uncertainty.</h3>
+            <p>
+              Choose an example, then analyze it to see the theme, whether the
+              request is actionable, and how much it blocks work.
+            </p>
+            <dl class="type-guide">
+              <div>
+                <dt>Choice</dt>
+                <dd>A probability for each named theme.</dd>
+              </div>
+              <div>
+                <dt>Noul</dt>
+                <dd>The probability of a yes answer.</dd>
+              </div>
+              <div>
+                <dt>Score</dt>
+                <dd>A weighted position on an ordered rubric.</dd>
+              </div>
+            </dl>
+          </div>
+          <div id="results" hidden>
+            <section class="answer" aria-labelledby="theme-title">
+              <div class="answer-heading">
+                <h3 id="theme-title">What is it about?</h3>
+                <span class="type-tag">Choice</span>
+              </div>
+              <div class="answer-value">
+                <strong id="theme-value"></strong
+                ><span id="theme-probability"></span>
+              </div>
+              <div id="theme-bars" class="distributions"></div>
+              <div class="policy">
+                <div class="policy-heading">
+                  <label for="threshold">Theme review threshold</label
+                  ><output for="threshold" id="threshold-value">80%</output>
+                </div>
+                <input
+                  id="threshold"
+                  type="range"
+                  min="50"
+                  max="100"
+                  step="1"
+                  value="80"
+                  aria-describedby="threshold-help"
+                />
+                <p id="policy-result" role="status"></p>
+                <p id="threshold-help" class="help">
+                  Your rule: review when the winning theme probability is below
+                  this threshold. Moving this slider makes no API call.
+                </p>
+              </div>
+            </section>
+            <section class="answer" aria-labelledby="actionable-title">
+              <div class="answer-heading">
+                <h3 id="actionable-title">Can a team act on it?</h3>
+                <span class="type-tag">Noul</span>
+              </div>
+              <div class="answer-value">
+                <strong id="actionable-value"></strong
+                ><span>probability of yes</span>
+              </div>
+              <div id="actionable-bars" class="distributions"></div>
+              <p class="help">
+                “Yes” means a specific problem or desired change is stated. This
+                does not judge feasibility or promise a fix.
+              </p>
+            </section>
+            <section class="answer" aria-labelledby="impact-title">
+              <div class="answer-heading">
+                <h3 id="impact-title">How much is work blocked?</h3>
+                <span class="type-tag">Score</span>
+              </div>
+              <div class="answer-value">
+                <strong id="impact-value"></strong><span>on a 0–2 rubric</span>
+              </div>
+              <div id="impact-bars" class="distributions"></div>
+              <p class="help">
+                The score is a probability-weighted average of levels 0, 1, and
+                2. A fractional score is not a percentage. No stated blockage
+                does not prove there is none.
+              </p>
+            </section>
+            <p class="caveat">
+              Probabilities describe this model’s judgment. They are not
+              measured accuracy guarantees. A confident answer can still be
+              wrong.
+            </p>
+          </div>
+        </section>
+      </div>
+      <details id="rubric-details">
+        <summary>The questions behind the results</summary>
+        <p class="help">
+          All three questions use the same feedback in one request. These are
+          the exact instructions and criteria sent to Jev.
+        </p>
+        <div id="rubrics"></div>
+      </details>
+      <footer>
+        <span>A working Jev example</span
+        ><span>Local session · Results clear on reload</span>
+      </footer>
+    </main>
+  </body>
+</html>
