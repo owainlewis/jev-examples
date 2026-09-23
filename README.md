@@ -16,6 +16,10 @@ Three small Python examples and a working ticket queue.
 
 [Install and try issue-ready](demos/issue-ready/README.md) to assess GitHub issues with Jev and apply readiness labels. Includes local examples for rehearsing the demo.
 
+## Email triage skill
+
+[Try email-triage](demos/email-triage/README.md): Python classifies fictional or read-only Gmail messages with Jev, caches results, and reports probabilities and estimated API cost. Codex presents the report through a shareable skill.
+
 ## Run the Python examples
 
 Install [uv](https://docs.astral.sh/uv/getting-started/installation/). From this folder:

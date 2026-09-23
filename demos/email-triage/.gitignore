@@ -1,0 +1,5 @@
+.env
+*.sqlite3*
+*token*.json
+*credentials*.json
+__pycache__/
