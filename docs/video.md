@@ -161,7 +161,7 @@ Three short files show real API calls using invented tickets:
 
 | Example | What it demonstrates |
 | --- | --- |
-| [01-noul.py](../src/01-noul.py) | Detect blocked workspace access and use its probability to choose the next step |
+| [01-noul.py](../src/01-noul.py) | Estimate whether text contains PII; print the probability and a decision using a threshold above 50% |
 | [02-choice.py](../src/02-choice.py) | Select billing, technical, product, or other; review results below 80% |
 | [03-score.py](../src/03-score.py) | Score work impact using normal work, a workaround, and blocked work as levels |
 

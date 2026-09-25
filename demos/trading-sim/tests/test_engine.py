@@ -43,6 +43,25 @@ class LedgerTests(unittest.TestCase):
         self.assertEqual(self.e.quantity, 0)
         self.assertAlmostEqual(self.e.snapshot()["unrealized"], 0)
 
+    def test_trade_count_survives_event_history_trim(self):
+        self.assertEqual(self.e.snapshot()["trade_count"], 0)
+        self.decide("buy")
+        self.assertEqual(self.e.snapshot()["trade_count"], 0)
+        self.e.quote(100, 102, 102, 102)
+        self.assertEqual(self.e.snapshot()["trade_count"], 1)
+
+        for timestamp in range(103, 203):
+            self.e.quote(100, 102, timestamp, timestamp)
+            self.decide("hold", timestamp)
+
+        self.assertEqual(len(self.e.events), 100)
+        self.assertTrue(all(event["status"] == "Hold" for event in self.e.events))
+        self.assertEqual(self.e.snapshot()["trade_count"], 1)
+        self.decide("sell", 203)
+        self.e.quote(110, 112, 204, 204)
+        self.assertEqual(self.e.snapshot()["trade_count"], 2)
+        self.assertEqual(Engine().snapshot()["trade_count"], 0)
+
     def test_cannot_sell_without_position_or_buy_twice(self):
         self.assertEqual(self.decide("sell")["status"], "Blocked: no position")
         self.decide("buy")
@@ -62,6 +81,7 @@ class LedgerTests(unittest.TestCase):
         self.e.quote(100, 102, 102, 102)
         self.assertEqual(self.e.cash, 10000)
         self.assertEqual(self.e.events[0]["status"], "Cancelled on pause")
+        self.assertEqual(self.e.snapshot()["trade_count"], 0)
 
     def test_stale_and_out_of_order_quotes_rejected(self):
         self.assertFalse(self.e.quote(100, 102, 99, 100))
@@ -74,6 +94,7 @@ class LedgerTests(unittest.TestCase):
         self.e.quote(100, 102, 120, 120)
         self.assertEqual(self.e.cash, 10000)
         self.assertTrue(self.e.events[0]["status"].startswith("Expired"))
+        self.assertEqual(self.e.snapshot()["trade_count"], 0)
 
     def test_invalid_probability_rejected(self):
         for p in (
