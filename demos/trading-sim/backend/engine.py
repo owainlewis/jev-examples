@@ -17,6 +17,7 @@ class Engine:
         self.cost_basis = 0.0
         self.realized = 0.0
         self.fees = 0.0
+        self.trade_count = 0
         self.peak = STARTING_CASH
         self.drawdown = 0.0
         self.pending = None
@@ -134,6 +135,7 @@ class Engine:
             self.quantity = 0
             self.cost_basis = 0
         self.fees += fee
+        self.trade_count += 1
         event.update(
             status="Filled", fill=price, quantity=quantity, fee=fee, filled_at=timestamp
         )
@@ -179,5 +181,5 @@ class Engine:
             "latency": self.latency,
             "probabilities": self.probabilities,
             "choice": self.choice,
-            "trade_count": sum(e["status"] == "Filled" for e in self.events),
+            "trade_count": self.trade_count,
         }
